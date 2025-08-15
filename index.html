@@ -29,8 +29,8 @@
     .footer { margin-top: 16px; font-size: 12px; color: #6b7280; }
     code { background: #f3f4f6; padding: 0 4px; border-radius: 4px; }
   </style>
-  <!-- ★ 追加：先にライブラリを読み込む（相対パス） -->
-<script src="tesseract/tesseract.min.js" defer></script>
+<!-- ← これを </head> の直前に追加：先に本体ライブラリを読み込む -->
+<script src="tesseract/tesseract.min.js"></script>
 </head>
 <body>
   <h1>新ハナビ｜設定推測（ローカルOCR対応・デモ）</h1>
@@ -251,18 +251,35 @@ function init() {
     btnOcr.textContent = "OCR解析中...";
     btnOcr.disabled = true;
     try {
+      // --- ここで Tesseract 本体が無ければCDNから即フォールバック ---
+      if (!window.Tesseract || !window.Tesseract.createWorker) {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+
       const { createWorker } = window.Tesseract || {};
-      if (!createWorker) throw new Error("Tesseract not loaded");
+      if (!createWorker) {
+        throw new Error("Tesseract library not loaded");
+      }
+
+      // 相対パス（GitHub Pagesのプロジェクト配下を指す）
       const worker = await createWorker({
         workerPath: "tesseract/worker.min.js",
-        corePath: "tesseract/tesseract-core.wasm.js",
-        langPath: "tesseract/lang-data",
-        logger: ()=>{},
+        corePath:   "tesseract/tesseract-core.wasm.js",
+        langPath:   "tesseract/lang-data",
+        logger:     ()=>{},
       });
+
       await worker.loadLanguage("jpn+eng");
       await worker.initialize("jpn+eng");
       const { data } = await worker.recognize(state.imgUrl);
       await worker.terminate();
+
       const t = (data && data.text) || "";
       state.ocrText = t;
       text.value = t;
@@ -270,7 +287,8 @@ function init() {
       renderMetrics();
       renderBars();
     } catch (e) {
-      setError("OCRが使用できません。tesseract/ に必要ファイルを配置するか、テキストを貼り付けて「テキストから解析」を使ってください。");
+      console.error(e);
+      setError("OCRが使用できません。tesseract/ の配置とファイル名、またはネットワーク制限を確認してください。テキスト貼り付け→解析でも続行できます。");
     } finally {
       btnOcr.textContent = "画像から解析";
       btnOcr.disabled = false;
