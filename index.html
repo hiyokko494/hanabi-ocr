@@ -34,7 +34,7 @@
   <h1>新ハナビ｜設定推測（ローカルOCR対応・デモ）</h1>
   <div class="hint">
     <strong>使い方:</strong> スクショを選んで「画像から解析」。失敗や未準備なら、下のテキスト欄に貼り付けて「テキストから解析」を押してください。<br/>
-    Option B（ローカル同梱）で使う場合は、<code>/tesseract/</code> フォルダに必要ファイルを置いてから再読み込みしてください。
+    Option B（ローカル同梱）で使う場合は、<code>tesseract/</code> フォルダに必要ファイルを置いてから再読み込みしてください。
   </div>
 
   <div id="err" class="error" style="display:none"></div>
@@ -68,7 +68,7 @@
   </div>
 
   <div class="footer">
-    ローカルOCR：<code>/tesseract/</code> に <code>worker.min.js</code>, <code>tesseract-core.wasm.js</code>, <code>lang-data/jpn.traineddata.gz</code>, <code>lang-data/eng.traineddata.gz</code> を配置。
+    ローカルOCR：<code>tesseract/</code> に <code>worker.min.js</code>, <code>tesseract-core.wasm.js</code>, <code>lang-data/jpn.traineddata.gz</code>, <code>lang-data/eng.traineddata.gz</code> を配置。
   </div>
 
 <script>
@@ -252,9 +252,9 @@ function init() {
       const { createWorker } = window.Tesseract || {};
       if (!createWorker) throw new Error("Tesseract not loaded");
       const worker = await createWorker({
-        workerPath: "/tesseract/worker.min.js",
-        corePath: "/tesseract/tesseract-core.wasm.js",
-        langPath: "/tesseract/lang-data",
+        workerPath: "tesseract/worker.min.js",
+        corePath: "tesseract/tesseract-core.wasm.js",
+        langPath: "tesseract/lang-data",
         logger: ()=>{},
       });
       await worker.loadLanguage("jpn+eng");
@@ -268,7 +268,7 @@ function init() {
       renderMetrics();
       renderBars();
     } catch (e) {
-      setError("OCRが使用できません。/tesseract/ に必要ファイルを配置するか、テキストを貼り付けて「テキストから解析」を使ってください。");
+      setError("OCRが使用できません。tesseract/ に必要ファイルを配置するか、テキストを貼り付けて「テキストから解析」を使ってください。");
     } finally {
       btnOcr.textContent = "画像から解析";
       btnOcr.disabled = false;
@@ -284,10 +284,10 @@ function init() {
   });
 }
 
-// Attempt to load /tesseract/tesseract.min.js (non-fatal)
+// Attempt to load tesseract/tesseract.min.js (non-fatal)
 (function tryLoadTesseract(){
   const s = document.createElement("script");
-  s.src = "/tesseract/tesseract.min.js";
+  s.src = "tesseract/tesseract.min.js"; // 相対パスに変更
   s.async = true;
   s.onload = ()=>{};
   s.onerror = ()=>{};
