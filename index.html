@@ -109,67 +109,88 @@ const NUM_PERCENT = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
    2) ダメなら「ラベル行が先、数値行が後」の二段構成を自動対応（zip）
 */
 function parseMetricsFromText(rawText) {
-  const text = sanitize(rawText);
+  // --- 正規化 ---
+  let text = sanitize(rawText || "");
+  // OCRノイズ救済: 末尾の n/N を「回」と誤認しているケースを補正（45n => 45回）
+  text = text.replace(/(\b[0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*[nN]\b/g, (_, num) => `${num}回`);
+
   const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
 
-  // 1) インライン抽出（同じ行にある場合）
-  function pickInline(labelRe, unitRe) {
-    const line = lines.find(l => labelRe.test(l) && unitRe.test(l));
+  // まずは従来の「同じ行にラベルと値」形式を試す
+  const getInline = (labelRe, unitReg, firstNumber = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/) => {
+    const line = lines.find(l => labelRe.test(l) && unitReg.test(l));
     if (!line) return undefined;
-    const m = line.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/);
+    const m = line.match(firstNumber);
     return m ? Number(m[1].replace(/,/g, "")) : undefined;
+  };
+
+  let games  = getInline(/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, /G/i);
+  let bell   = getInline(/風鈴合算|風鈴\s*合算/i, /回/);
+  let cherry = getInline(/チェリー合算|チェリー\s*合算/i, /回/);
+  let ice    = getInline(/氷合算|氷\s*合算/i, /回/);
+
+  // ここで取れたら終了
+  if (games && bell && cherry && ice) {
+    return { games, bell, cherry, ice };
   }
 
-  let games  = pickInline(/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, /G/i);
-  let bell   = pickInline(/風鈴合算|風鈴\s*合算/i, /回/);
-  let cherry = pickInline(/チェリー合算|チェリー\s*合算/i, /回/);
-  let ice    = pickInline(/氷合算|氷\s*合算/i, /回/);
+  // --- ストリーミング方式のフォールバック ---
+  // 欲しいラベルを見つけた順にキューへ積み、以後に現れる最初の値を割当て
+  const WANT = [
+    { key: "games",  re: /総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, unit: "G"  },
+    { key: "bell",   re: /風鈴合算|風鈴\s*合算/i,                                   unit: "回" },
+    { key: "cherry", re: /チェリー合算|チェリー\s*合算/i,                           unit: "回" },
+    { key: "ice",    re: /氷合算|氷\s*合算/i,                                       unit: "回" },
+  ];
 
-  // 2) 二段構成（ラベル列 → 数値列）へのフォールバック
-  if ([games, bell, cherry, ice].some(v => v === undefined)) {
-    const labels = [];
-    const values = [];
+  const NUM_G      = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
+  const NUM_KAI    = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
+  const NUM_RATIO  = /^\s*1\s*\/\s*[0-9]+(?:\.[0-9]+)?\s*$/; // 1/xxx はスキップ
+  const NUM_PERCENT= /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
+  const NUM_PLATES = /^\s*[0-9,]+\s*枚\s*$/;
 
-    for (const l of lines) {
-      if (NUM_G.test(l)) {
-        const v = Number(l.replace(NUM_G, "$1").replace(/,/g,""));
-        values.push({ unit:"G", value:v });
-      } else if (NUM_KAI.test(l)) {
-        const v = Number(l.replace(NUM_KAI, "$1").replace(/,/g,""));
-        values.push({ unit:"回", value:v });
-      } else if (NUM_1DIV.test(l) || NUM_PERCENT.test(l) || /^[0-9,]+枚$/.test(l)) {
-        // 比率・％・枚数はスキップ（ラベルに紐付けない）
-      } else if (/^[0-9,.\-\/%]+$/.test(l)) {
-        // 数字の塊だが単位なし → ノイズ。無視
-      } else {
-        labels.push(l); // ラベル列
+  const pending = []; // { key, unit } を積む
+
+  // 走査
+  for (const line of lines) {
+    // 値の行？
+    let valueInfo = null;
+    if (NUM_G.test(line)) {
+      const v = Number(line.replace(NUM_G, "$1").replace(/,/g, ""));
+      valueInfo = { unit: "G", value: v };
+    } else if (NUM_KAI.test(line)) {
+      const v = Number(line.replace(NUM_KAI, "$1").replace(/,/g, ""));
+      valueInfo = { unit: "回", value: v };
+    } else if (NUM_RATIO.test(line) || NUM_PERCENT.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
+      // 比率/％/枚/数値の塊は無視
+    } else {
+      // ラベルの可能性
+      for (const want of WANT) {
+        if (want.re.test(line)) {
+          // 既に保留に同じkeyが無ければ積む（重複回避）
+          if (!pending.some(p => p.key === want.key)) pending.push({ key: want.key, unit: want.unit });
+        }
       }
     }
 
-    // 値は「G」「回」のみをラベル順に割当て（比率行は除外済み）
-    const labelToValue = {};
-    let vi = 0;
-    for (let li = 0; li < labels.length && vi < values.length; li++) {
-      const lab = labels[li];
-      const val = values[vi];
-      labelToValue[lab] = val;
-      vi++;
+    // 値が来ていて、pending があれば割当てる
+    if (valueInfo && pending.length) {
+      // 先頭から、単位が合うものに割当て（合わないものはスキップしつつ保持）
+      let consumed = false;
+      for (let i = 0; i < pending.length; i++) {
+        if (pending[i].unit === valueInfo.unit) {
+          const k = pending[i].key;
+          if (k === "games") games = games ?? valueInfo.value;
+          if (k === "bell")  bell  = bell  ?? valueInfo.value;
+          if (k === "cherry")cherry= cherry?? valueInfo.value;
+          if (k === "ice")   ice   = ice   ?? valueInfo.value;
+          pending.splice(i, 1);
+          consumed = true;
+          break;
+        }
+      }
+      // 単位が合わなくても次の値で拾うので何もしない
     }
-
-    // 欲しいラベルたち（幅広い表記ゆれを許容）
-    function findByLabel(keys, wantUnit) {
-      const key = labels.find(lab => keys.some(re => re.test(lab)));
-      if (!key) return undefined;
-      const hit = labelToValue[key];
-      if (!hit) return undefined;
-      if (wantUnit && hit.unit !== wantUnit) return undefined;
-      return hit.value;
-    }
-
-    games  ??= findByLabel([/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i], "G");
-    bell   ??= findByLabel([/風鈴合算|風鈴\s*合算/i], "回");
-    cherry ??= findByLabel([/チェリー合算|チェリー\s*合算/i], "回");
-    ice    ??= findByLabel([/氷合算|氷\s*合算/i], "回");
   }
 
   return { games, bell, cherry, ice };
