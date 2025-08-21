@@ -33,6 +33,7 @@
 </head>
 <body>
   <h1>特リプTV｜新ハナビ｜思い出の数値</h1>
+
   <div class="hint">
     <strong>使い方:</strong> スクショを選んで「画像から解析」。失敗や未準備なら、下のテキスト欄に貼り付けて「テキストから解析」。<br/>
     iPhoneは画像を<strong>長押し → テキストをコピー</strong>でOK。貼り付けが「ラベル行 → 数値行」に分かれても自動で対応します。<br/>
@@ -53,6 +54,12 @@
     <h3>抽出一覧（貼り付けテキストから拾えた項目）</h3>
     <div id="extracted">まだ抽出結果がありません。</div>
   </div>
+
+  <div class="card">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h3>テキスト（手動貼り付け）</h3>
+      <button id="btn-parse" class="btn" style="background:#2563eb; color:#fff;">テキストから解析</button>
+    </div>
     <textarea id="text" placeholder="例)
 総プレイ数 6,056G
 風鈴合算 813回 1/7.4
@@ -98,15 +105,12 @@ function sanitize(s) {
     .replace(/\r/g, "");
 }
 
-const NUM_G  = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
-const NUM_KAI= /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
-const NUM_1DIV = /^\s*1\s*\/\s*([0-9]+(?:\.[0-9]+)?)\s*$/;
+const NUM_G       = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
+const NUM_KAI     = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
+const NUM_1DIV    = /^\s*1\s*\/\s*([0-9]+(?:\.[0-9]+)?)\s*$/;
 const NUM_PERCENT = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
 
-/* ===== テキスト → メトリクス抽出 =====
-   1) まず従来の「同じ行にラベルと数値」形式を試す
-   2) ダメなら「ラベル行が先、数値行が後」の二段構成を自動対応（zip）
-*/
+/* ===== テキスト → メトリクス抽出 ===== */
 function parseMetricsFromText(rawText) {
   let text = sanitize(rawText || "");
   // OCRノイズ救済: 45n → 45回
@@ -114,6 +118,7 @@ function parseMetricsFromText(rawText) {
 
   const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
 
+  // 同行インライン抽出（ラベルと値が同じ行にある場合）
   const getInline = (labelRe, unitReg, firstNumber = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/) => {
     const line = lines.find(l => labelRe.test(l) && unitReg.test(l));
     if (!line) return undefined;
@@ -126,10 +131,10 @@ function parseMetricsFromText(rawText) {
   let cherry = getInline(/チェリー合算|チェリー\s*合算/i, /回/);
   let ice    = getInline(/氷合算|氷\s*合算/i, /回/);
 
-  // 一覧出力用の器
+  // 一覧出力用
   const extras = []; // {label, unit, value}
 
-  // フォールバック：ストリーミング割当（ラベルを見つけたらキュー→次の数値にひも付け）
+  // ストリーミング割当：ラベル検出→次に出る値（単位一致なら優先）を紐付け
   const WANT = [
     { key: "games",  re: /総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, unit: "G"  , label:"総プレイ数" },
     { key: "bell",   re: /風鈴合算|風鈴\s*合算/i,                                   unit: "回" , label:"風鈴合算" },
@@ -137,28 +142,27 @@ function parseMetricsFromText(rawText) {
     { key: "ice",    re: /氷合算|氷\s*合算/i,                                       unit: "回" , label:"氷合算" },
   ];
 
-  const NUM_G      = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
-  const NUM_KAI    = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
-  const NUM_RATIO  = /^\s*1\s*\/\s*[0-9]+(?:\.[0-9]+)?\s*$/;
-  const NUM_PERCENT= /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
-  const NUM_PLATES = /^\s*[0-9,]+\s*枚\s*$/;
+  const NUM_G2       = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
+  const NUM_KAI2     = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
+  const NUM_RATIO    = /^\s*1\s*\/\s*[0-9]+(?:\.[0-9]+)?\s*$/;
+  const NUM_PERCENT2 = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
+  const NUM_PLATES   = /^\s*[0-9,]+\s*枚\s*$/;
 
   const pending = []; // { key?, unit, label? }
 
-  // 走査：ラベルはとりあえず全部extras候補に、値が来たらペアリング
   for (const line of lines) {
     let valueInfo = null;
 
-    if (NUM_G.test(line)) {
-      const v = Number(line.replace(NUM_G, "$1").replace(/,/g, ""));
+    if (NUM_G2.test(line)) {
+      const v = Number(line.replace(NUM_G2, "$1").replace(/,/g, ""));
       valueInfo = { unit: "G", value: v };
-    } else if (NUM_KAI.test(line)) {
-      const v = Number(line.replace(NUM_KAI, "$1").replace(/,/g, ""));
+    } else if (NUM_KAI2.test(line)) {
+      const v = Number(line.replace(NUM_KAI2, "$1").replace(/,/g, ""));
       valueInfo = { unit: "回", value: v };
-    } else if (NUM_RATIO.test(line) || NUM_PERCENT.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
-      // 比率/％/枚/純数値は一覧には別枠だが、今回はスキップ
+    } else if (NUM_RATIO.test(line) || NUM_PERCENT2.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
+      // 比率/％/枚/数値の塊はスキップ（必要なら拡張可）
     } else {
-      // ラベル検出：WANTに合うものはkey付きで、その他はkeyなしで積む
+      // ラベル検出
       let matchedWant = false;
       for (const want of WANT) {
         if (want.re.test(line)) {
@@ -167,25 +171,23 @@ function parseMetricsFromText(rawText) {
         }
       }
       if (!matchedWant) {
-        // 一覧用の汎用ラベル（次に来るG/回をひも付け）
+        // 汎用ラベル（次に来るG/回をひも付け）
         pending.push({ key: null, unit: null, label: line });
       }
     }
 
     if (valueInfo && pending.length) {
-      // 先頭から、単位が指定されていれば一致させ、無ければそのまま割当て
+      // 先頭から、単位が指定されていれば一致優先、なければ素直に割当て
       let idx = -1;
       for (let i=0;i<pending.length;i++) {
         if (!pending[i].unit || pending[i].unit === valueInfo.unit) { idx = i; break; }
       }
       if (idx !== -1) {
         const p = pending.splice(idx,1)[0];
-        // コア4項目の上書き
         if (p.key === "games"  && games  == null) games  = valueInfo.value;
         if (p.key === "bell"   && bell   == null) bell   = valueInfo.value;
         if (p.key === "cherry" && cherry == null) cherry = valueInfo.value;
         if (p.key === "ice"    && ice    == null) ice    = valueInfo.value;
-        // 一覧にも登録
         extras.push({ label: p.label || "（ラベル）", unit: valueInfo.unit, value: valueInfo.value });
       }
     }
@@ -194,69 +196,7 @@ function parseMetricsFromText(rawText) {
   return { games, bell, cherry, ice, extras };
 }
 
-  // --- ストリーミング方式のフォールバック ---
-  // 欲しいラベルを見つけた順にキューへ積み、以後に現れる最初の値を割当て
-  const WANT = [
-    { key: "games",  re: /総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, unit: "G"  },
-    { key: "bell",   re: /風鈴合算|風鈴\s*合算/i,                                   unit: "回" },
-    { key: "cherry", re: /チェリー合算|チェリー\s*合算/i,                           unit: "回" },
-    { key: "ice",    re: /氷合算|氷\s*合算/i,                                       unit: "回" },
-  ];
-
-  const NUM_G      = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
-  const NUM_KAI    = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
-  const NUM_RATIO  = /^\s*1\s*\/\s*[0-9]+(?:\.[0-9]+)?\s*$/; // 1/xxx はスキップ
-  const NUM_PERCENT= /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
-  const NUM_PLATES = /^\s*[0-9,]+\s*枚\s*$/;
-
-  const pending = []; // { key, unit } を積む
-
-  // 走査
-  for (const line of lines) {
-    // 値の行？
-    let valueInfo = null;
-    if (NUM_G.test(line)) {
-      const v = Number(line.replace(NUM_G, "$1").replace(/,/g, ""));
-      valueInfo = { unit: "G", value: v };
-    } else if (NUM_KAI.test(line)) {
-      const v = Number(line.replace(NUM_KAI, "$1").replace(/,/g, ""));
-      valueInfo = { unit: "回", value: v };
-    } else if (NUM_RATIO.test(line) || NUM_PERCENT.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
-      // 比率/％/枚/数値の塊は無視
-    } else {
-      // ラベルの可能性
-      for (const want of WANT) {
-        if (want.re.test(line)) {
-          // 既に保留に同じkeyが無ければ積む（重複回避）
-          if (!pending.some(p => p.key === want.key)) pending.push({ key: want.key, unit: want.unit });
-        }
-      }
-    }
-
-    // 値が来ていて、pending があれば割当てる
-    if (valueInfo && pending.length) {
-      // 先頭から、単位が合うものに割当て（合わないものはスキップしつつ保持）
-      let consumed = false;
-      for (let i = 0; i < pending.length; i++) {
-        if (pending[i].unit === valueInfo.unit) {
-          const k = pending[i].key;
-          if (k === "games") games = games ?? valueInfo.value;
-          if (k === "bell")  bell  = bell  ?? valueInfo.value;
-          if (k === "cherry")cherry= cherry?? valueInfo.value;
-          if (k === "ice")   ice   = ice   ?? valueInfo.value;
-          pending.splice(i, 1);
-          consumed = true;
-          break;
-        }
-      }
-      // 単位が合わなくても次の値で拾うので何もしない
-    }
-  }
-
-  return { games, bell, cherry, ice };
-}
-
-/* ===== 推測ロジック（変更なし） ===== */
+/* ===== 推測ロジック（Poisson尤度） ===== */
 // 観測: 各カウント k は Poisson(λ) に従うとみなす。
 // 期待値 λ = 総ゲーム数 / 期待分母（例: 風鈴 1/7.7 → λ=games/7.7）
 // 設定ごとに log 尤度 Σ[k*ln(λ)-λ] を合算し、softmaxで％化。
@@ -271,7 +211,6 @@ function estimateAllSettings(metrics) {
   const core = PRESETS["新ハナビ"];
   const base = [1,2,5,6];
 
-  // 使う指標を柔軟にON/OFF（将来追加しやすい）
   const use = {
     bell:   obs.bell   > 0,
     cherry: obs.cherry > 0,
@@ -286,7 +225,6 @@ function estimateAllSettings(metrics) {
     return { setting, loglik };
   });
 
-  // softmax → percent
   const maxLL = Math.max(...rows.map(r=>r.loglik));
   const exps = rows.map(r => Math.exp(r.loglik - maxLL));
   const sum  = exps.reduce((a,b)=>a+b,0) || 1;
@@ -377,7 +315,6 @@ function renderExtracted() {
   if (!mount) return;
   const ex = state.metrics.extras || [];
   if (!ex.length) { mount.textContent = "まだ抽出結果がありません。"; return; }
-  // 簡易テーブル
   const rows = ex.map(e => 
     `<tr><td style="padding:4px 8px;border:1px solid #e5e7eb;">${e.label}</td>
          <td style="padding:4px 8px;border:1px solid #e5e7eb;text-align:right;">${e.value}</td>
@@ -407,9 +344,9 @@ function init() {
     console.assert(m.games===6000 && m.bell===780 && m.cherry===380 && m.ice===110, "parse ok");
   } catch {}
 
-      renderMetrics();
-      renderBars();
-      renderExtracted();   // 追加
+  renderMetrics();
+  renderBars();
+  renderExtracted();
 
   const file = document.getElementById("file");
   const thumb = document.getElementById("thumb");
@@ -428,7 +365,7 @@ function init() {
     btnOcr.classList.remove("disabled"); btnOcr.disabled = false;
   });
 
-  // ★ GitHub Pages でも確実に読める相対パスを算出
+  // GitHub Pages でも確実に読める相対パス
   const TESS_BASE = new URL("./tesseract/", location.href).href;
 
   btnOcr.addEventListener("click", async ()=>{
@@ -439,7 +376,6 @@ function init() {
       const { createWorker } = window.Tesseract || {};
       if (!createWorker) throw new Error("Tesseract not loaded");
       const worker = await createWorker({
-        // ★ 先頭スラッシュを使わず、相対パスで指定
         workerPath: TESS_BASE + "worker.min.js",
         corePath:   TESS_BASE + "tesseract-core.wasm.js",
         langPath:   TESS_BASE + "lang-data",
@@ -455,12 +391,11 @@ function init() {
       state.metrics = parseMetricsFromText(t);
       renderMetrics();
       renderBars();
-      renderExtracted();   // 追加
+      renderExtracted();
       if (!state.metrics.games) {
         setError("OCR結果から主要項目を特定できませんでした。テキスト欄で貼付け→「テキストから解析」をお試しください。");
       }
     } catch (e) {
-      // ★ ここで“Failed to fetch”や404でも丁寧に案内
       setError("OCRが使用できません。tesseract/ フォルダの配置とパスをご確認の上、テキスト貼付け→「テキストから解析」で続行できます。");
     } finally {
       btnOcr.disabled = false; spin.style.display="none";
@@ -473,14 +408,13 @@ function init() {
     state.metrics = parseMetricsFromText(state.ocrText);
     renderMetrics();
     renderBars();
-    renderExtracted();   // 追加
-
+    renderExtracted();
     if (!state.metrics.games) {
       setError("総プレイ数（○○G）が見つかりませんでした。貼り付けたテキストをご確認ください。");
     }
   });
 
-  // ★ tesseract.min.js を相対で「読み込み試行」（無くても動く）
+  // tesseract.min.js を相対で読み込み試行（無くても動く）
   (function tryLoadTesseract(){
     const s = document.createElement("script");
     s.src = TESS_BASE + "tesseract.min.js";
