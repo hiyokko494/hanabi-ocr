@@ -50,10 +50,9 @@
   </div>
 
   <div class="card">
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-      <h3>テキスト（手動貼り付け）</h3>
-      <button id="btn-parse" class="btn" style="background:#2563eb; color:#fff;">テキストから解析</button>
-    </div>
+    <h3>抽出一覧（貼り付けテキストから拾えた項目）</h3>
+    <div id="extracted">まだ抽出結果がありません。</div>
+  </div>
     <textarea id="text" placeholder="例)
 総プレイ数 6,056G
 風鈴合算 813回 1/7.4
@@ -109,14 +108,12 @@ const NUM_PERCENT = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
    2) ダメなら「ラベル行が先、数値行が後」の二段構成を自動対応（zip）
 */
 function parseMetricsFromText(rawText) {
-  // --- 正規化 ---
   let text = sanitize(rawText || "");
-  // OCRノイズ救済: 末尾の n/N を「回」と誤認しているケースを補正（45n => 45回）
+  // OCRノイズ救済: 45n → 45回
   text = text.replace(/(\b[0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*[nN]\b/g, (_, num) => `${num}回`);
 
   const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
 
-  // まずは従来の「同じ行にラベルと値」形式を試す
   const getInline = (labelRe, unitReg, firstNumber = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/) => {
     const line = lines.find(l => labelRe.test(l) && unitReg.test(l));
     if (!line) return undefined;
@@ -129,10 +126,73 @@ function parseMetricsFromText(rawText) {
   let cherry = getInline(/チェリー合算|チェリー\s*合算/i, /回/);
   let ice    = getInline(/氷合算|氷\s*合算/i, /回/);
 
-  // ここで取れたら終了
-  if (games && bell && cherry && ice) {
-    return { games, bell, cherry, ice };
+  // 一覧出力用の器
+  const extras = []; // {label, unit, value}
+
+  // フォールバック：ストリーミング割当（ラベルを見つけたらキュー→次の数値にひも付け）
+  const WANT = [
+    { key: "games",  re: /総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, unit: "G"  , label:"総プレイ数" },
+    { key: "bell",   re: /風鈴合算|風鈴\s*合算/i,                                   unit: "回" , label:"風鈴合算" },
+    { key: "cherry", re: /チェリー合算|チェリー\s*合算/i,                           unit: "回" , label:"チェリー合算" },
+    { key: "ice",    re: /氷合算|氷\s*合算/i,                                       unit: "回" , label:"氷合算" },
+  ];
+
+  const NUM_G      = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
+  const NUM_KAI    = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
+  const NUM_RATIO  = /^\s*1\s*\/\s*[0-9]+(?:\.[0-9]+)?\s*$/;
+  const NUM_PERCENT= /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
+  const NUM_PLATES = /^\s*[0-9,]+\s*枚\s*$/;
+
+  const pending = []; // { key?, unit, label? }
+
+  // 走査：ラベルはとりあえず全部extras候補に、値が来たらペアリング
+  for (const line of lines) {
+    let valueInfo = null;
+
+    if (NUM_G.test(line)) {
+      const v = Number(line.replace(NUM_G, "$1").replace(/,/g, ""));
+      valueInfo = { unit: "G", value: v };
+    } else if (NUM_KAI.test(line)) {
+      const v = Number(line.replace(NUM_KAI, "$1").replace(/,/g, ""));
+      valueInfo = { unit: "回", value: v };
+    } else if (NUM_RATIO.test(line) || NUM_PERCENT.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
+      // 比率/％/枚/純数値は一覧には別枠だが、今回はスキップ
+    } else {
+      // ラベル検出：WANTに合うものはkey付きで、その他はkeyなしで積む
+      let matchedWant = false;
+      for (const want of WANT) {
+        if (want.re.test(line)) {
+          pending.push({ key: want.key, unit: want.unit, label: want.label });
+          matchedWant = true;
+        }
+      }
+      if (!matchedWant) {
+        // 一覧用の汎用ラベル（次に来るG/回をひも付け）
+        pending.push({ key: null, unit: null, label: line });
+      }
+    }
+
+    if (valueInfo && pending.length) {
+      // 先頭から、単位が指定されていれば一致させ、無ければそのまま割当て
+      let idx = -1;
+      for (let i=0;i<pending.length;i++) {
+        if (!pending[i].unit || pending[i].unit === valueInfo.unit) { idx = i; break; }
+      }
+      if (idx !== -1) {
+        const p = pending.splice(idx,1)[0];
+        // コア4項目の上書き
+        if (p.key === "games"  && games  == null) games  = valueInfo.value;
+        if (p.key === "bell"   && bell   == null) bell   = valueInfo.value;
+        if (p.key === "cherry" && cherry == null) cherry = valueInfo.value;
+        if (p.key === "ice"    && ice    == null) ice    = valueInfo.value;
+        // 一覧にも登録
+        extras.push({ label: p.label || "（ラベル）", unit: valueInfo.unit, value: valueInfo.value });
+      }
+    }
   }
+
+  return { games, bell, cherry, ice, extras };
+}
 
   // --- ストリーミング方式のフォールバック ---
   // 欲しいラベルを見つけた順にキューへ積み、以後に現れる最初の値を割当て
@@ -197,26 +257,40 @@ function parseMetricsFromText(rawText) {
 }
 
 /* ===== 推測ロジック（変更なし） ===== */
+// 観測: 各カウント k は Poisson(λ) に従うとみなす。
+// 期待値 λ = 総ゲーム数 / 期待分母（例: 風鈴 1/7.7 → λ=games/7.7）
+// 設定ごとに log 尤度 Σ[k*ln(λ)-λ] を合算し、softmaxで％化。
 function estimateAllSettings(metrics) {
   const g = metrics.games || 0;
   if (!g) return [];
-  const perG = {
-    bell:   (metrics.bell   || 0) / g,
-    cherry: (metrics.cherry || 0) / g,
-    ice:    (metrics.ice    || 0) / g,
+  const obs = {
+    bell:   metrics.bell   ?? 0,
+    cherry: metrics.cherry ?? 0,
+    ice:    metrics.ice    ?? 0,
   };
   const core = PRESETS["新ハナビ"];
   const base = [1,2,5,6];
+
+  // 使う指標を柔軟にON/OFF（将来追加しやすい）
+  const use = {
+    bell:   obs.bell   > 0,
+    cherry: obs.cherry > 0,
+    ice:    obs.ice    > 0,
+  };
+
   const rows = base.map((setting, idx) => {
-    const err = Math.pow(perG.bell - core.bell[idx],2)
-              + Math.pow(perG.cherry - core.cherry[idx],2)
-              + Math.pow(perG.ice - core.ice[idx],2);
-    const score = 1/(1+err);
-    return { setting, err, score, percent: 0 };
+    let loglik = 0;
+    if (use.bell)   { const denom = 1/core.bell[idx];   const lambda = g/denom;   loglik += obs.bell*Math.log(Math.max(lambda,1e-9)) - lambda; }
+    if (use.cherry) { const denom = 1/core.cherry[idx]; const lambda = g/denom;   loglik += obs.cherry*Math.log(Math.max(lambda,1e-9)) - lambda; }
+    if (use.ice)    { const denom = 1/core.ice[idx];    const lambda = g/denom;   loglik += obs.ice*Math.log(Math.max(lambda,1e-9)) - lambda; }
+    return { setting, loglik };
   });
-  const sum = rows.reduce((a,b)=>a+b.score,0) || 1;
-  rows.forEach(r => r.percent = (r.score/sum)*100);
-  return rows;
+
+  // softmax → percent
+  const maxLL = Math.max(...rows.map(r=>r.loglik));
+  const exps = rows.map(r => Math.exp(r.loglik - maxLL));
+  const sum  = exps.reduce((a,b)=>a+b,0) || 1;
+  return rows.map((r,i)=>({ setting:r.setting, percent: (exps[i]/sum)*100 }));
 }
 
 function barColor(p, maxP, minP) {
@@ -298,6 +372,27 @@ function renderBars() {
   });
 }
 
+function renderExtracted() {
+  const mount = document.getElementById("extracted");
+  if (!mount) return;
+  const ex = state.metrics.extras || [];
+  if (!ex.length) { mount.textContent = "まだ抽出結果がありません。"; return; }
+  // 簡易テーブル
+  const rows = ex.map(e => 
+    `<tr><td style="padding:4px 8px;border:1px solid #e5e7eb;">${e.label}</td>
+         <td style="padding:4px 8px;border:1px solid #e5e7eb;text-align:right;">${e.value}</td>
+         <td style="padding:4px 8px;border:1px solid #e5e7eb;">${e.unit || ""}</td></tr>`
+  ).join("");
+  mount.innerHTML = `<table style="border-collapse:collapse;font-size:12px;width:100%;">
+    <thead><tr>
+      <th style="text-align:left;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">項目</th>
+      <th style="text-align:right;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">値</th>
+      <th style="text-align:left;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">単位</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
 function setError(msg) {
   const box = document.getElementById("err");
   if (!msg) { box.style.display = "none"; box.textContent = ""; return; }
@@ -312,8 +407,9 @@ function init() {
     console.assert(m.games===6000 && m.bell===780 && m.cherry===380 && m.ice===110, "parse ok");
   } catch {}
 
-  renderMetrics();
-  renderBars();
+      renderMetrics();
+      renderBars();
+      renderExtracted();   // 追加
 
   const file = document.getElementById("file");
   const thumb = document.getElementById("thumb");
@@ -359,6 +455,7 @@ function init() {
       state.metrics = parseMetricsFromText(t);
       renderMetrics();
       renderBars();
+      renderExtracted();   // 追加
       if (!state.metrics.games) {
         setError("OCR結果から主要項目を特定できませんでした。テキスト欄で貼付け→「テキストから解析」をお試しください。");
       }
@@ -376,6 +473,8 @@ function init() {
     state.metrics = parseMetricsFromText(state.ocrText);
     renderMetrics();
     renderBars();
+    renderExtracted();   // 追加
+
     if (!state.metrics.games) {
       setError("総プレイ数（○○G）が見つかりませんでした。貼り付けたテキストをご確認ください。");
     }
