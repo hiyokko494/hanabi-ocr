@@ -3,13 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>新ハナビ｜設定推測（ローカルOCR対応・デモ）</title>
+  <title>特リプTV｜新ハナビ｜思い出の数値</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
-           margin: 24px; color: #111; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; margin: 24px; color: #111; }
     h1 { font-size: 20px; margin: 0 0 12px; }
     .hint { background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
-    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; }
+    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; display:none; }
     .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
     .btn { font-size: 13px; padding: 6px 10px; border-radius: 6px; border: 0; cursor: pointer; }
     .btn.primary { background: #111; color: #fff; }
@@ -17,7 +16,7 @@
     img.thumb { height: 112px; border: 1px solid #e5e7eb; border-radius: 8px; }
     .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-top: 12px; }
     .card h3 { margin: 0 0 8px; font-size: 14px; }
-    textarea { width: 100%; height: 120px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    textarea { width: 100%; height: 140px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
     .grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
     @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
     label span.key { width: 72px; color: #6b7280; display: inline-block; }
@@ -28,23 +27,26 @@
     .rowline { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
     .footer { margin-top: 16px; font-size: 12px; color: #6b7280; }
     code { background: #f3f4f6; padding: 0 4px; border-radius: 4px; }
+    .spinner { display:none; width: 14px; height: 14px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; margin-left:6px; }
+    @keyframes spin { to { transform: rotate(360deg);} }
   </style>
-<!-- ← これを </head> の直前に追加：先に本体ライブラリを読み込む -->
-<script src="tesseract/tesseract.min.js"></script>
 </head>
 <body>
-  <h1>新ハナビ｜設定推測（ローカルOCR対応・デモ）</h1>
+  <h1>特リプTV｜新ハナビ｜思い出の数値</h1>
   <div class="hint">
-    <strong>使い方:</strong> スクショを選んで「画像から解析」。失敗や未準備なら、下のテキスト欄に貼り付けて「テキストから解析」を押してください。<br/>
-    Option B（ローカル同梱）で使う場合は、<code>tesseract/</code> フォルダに必要ファイルを置いてから再読み込みしてください。
+    <strong>使い方:</strong> スクショを選んで「画像から解析」。失敗や未準備なら、下のテキスト欄に貼り付けて「テキストから解析」。<br/>
+    iPhoneは画像を<strong>長押し → テキストをコピー</strong>でOK。貼り付けが「ラベル行 → 数値行」に分かれても自動で対応します。<br/>
+    Option B（ローカル同梱）なら <code>tesseract/</code> フォルダに必要ファイルを置いてから再読み込み。
   </div>
 
-  <div id="err" class="error" style="display:none"></div>
+  <div id="err" class="error"></div>
 
   <div class="row">
     <input id="file" type="file" accept="image/*" />
     <img id="thumb" class="thumb" style="display:none" alt="preview"/>
-    <button id="btn-ocr" class="btn primary disabled" disabled>画像から解析</button>
+    <button id="btn-ocr" class="btn primary disabled" disabled>
+      画像から解析 <span id="spin" class="spinner"></span>
+    </button>
   </div>
 
   <div class="card">
@@ -70,15 +72,16 @@
   </div>
 
   <div class="footer">
-    ローカルOCR：<code>tesseract/</code> に <code>worker.min.js</code>, <code>tesseract-core.wasm.js</code>, <code>lang-data/jpn.traineddata.gz</code>, <code>lang-data/eng.traineddata.gz</code> を配置。
+    ローカルOCR：<code>tesseract/</code> に <code>worker.min.js</code>、<code>tesseract-core.wasm.js</code>、<code>tesseract.min.js</code>、および <code>lang-data/jpn.traineddata.gz</code> と <code>lang-data/eng.traineddata.gz</code> を配置。
   </div>
 
 <script>
+/* ===== プリセット ===== */
 const PRESETS = {
   "新ハナビ": {
-    bell: [1/7.7, 1/7.6, 1/7.5, 1/7.3],
+    bell:   [1/7.7,  1/7.6,  1/7.5,  1/7.3],
     cherry: [1/16.4, 1/15.3, 1/16.1, 1/15.6],
-    ice: [1/51.2, 1/51.8, 1/48.2, 1/49.3],
+    ice:    [1/51.2, 1/51.8, 1/48.2, 1/49.3],
   },
 };
 
@@ -88,37 +91,98 @@ const state = {
   metrics: { games: undefined, bell: undefined, cherry: undefined, ice: undefined },
 };
 
+/* ===== ユーティリティ ===== */
 function sanitize(s) {
-  return s
-    .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xFEE0))
-    .replace(/[，]/g, ",")
-    .replace(/[．]/g, ".")
-    .replace(/[　]/g, " ");
+  return (s || "")
+    .replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0))
+    .replace(/[，]/g, ",").replace(/[．]/g, ".").replace(/[　]/g, " ")
+    .replace(/\r/g, "");
 }
 
-function parseMetricsFromText(text) {
-  const lines = sanitize(text).split(/\r?\n/);
-  const getCount = (re) => {
-    const line = lines.find((l) => re.test(l));
+const NUM_G  = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
+const NUM_KAI= /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
+const NUM_1DIV = /^\s*1\s*\/\s*([0-9]+(?:\.[0-9]+)?)\s*$/;
+const NUM_PERCENT = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
+
+/* ===== テキスト → メトリクス抽出 =====
+   1) まず従来の「同じ行にラベルと数値」形式を試す
+   2) ダメなら「ラベル行が先、数値行が後」の二段構成を自動対応（zip）
+*/
+function parseMetricsFromText(rawText) {
+  const text = sanitize(rawText);
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+
+  // 1) インライン抽出（同じ行にある場合）
+  function pickInline(labelRe, unitRe) {
+    const line = lines.find(l => labelRe.test(l) && unitRe.test(l));
     if (!line) return undefined;
     const m = line.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/);
     return m ? Number(m[1].replace(/,/g, "")) : undefined;
-  };
-  return {
-    games: getCount(/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i),
-    bell: getCount(/風鈴合算|風鈴\s*合算/i),
-    cherry: getCount(/チェリー合算|チェリー\s*合算/i),
-    ice: getCount(/氷合算|氷\s*合算/i),
-  };
+  }
+
+  let games  = pickInline(/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, /G/i);
+  let bell   = pickInline(/風鈴合算|風鈴\s*合算/i, /回/);
+  let cherry = pickInline(/チェリー合算|チェリー\s*合算/i, /回/);
+  let ice    = pickInline(/氷合算|氷\s*合算/i, /回/);
+
+  // 2) 二段構成（ラベル列 → 数値列）へのフォールバック
+  if ([games, bell, cherry, ice].some(v => v === undefined)) {
+    const labels = [];
+    const values = [];
+
+    for (const l of lines) {
+      if (NUM_G.test(l)) {
+        const v = Number(l.replace(NUM_G, "$1").replace(/,/g,""));
+        values.push({ unit:"G", value:v });
+      } else if (NUM_KAI.test(l)) {
+        const v = Number(l.replace(NUM_KAI, "$1").replace(/,/g,""));
+        values.push({ unit:"回", value:v });
+      } else if (NUM_1DIV.test(l) || NUM_PERCENT.test(l) || /^[0-9,]+枚$/.test(l)) {
+        // 比率・％・枚数はスキップ（ラベルに紐付けない）
+      } else if (/^[0-9,.\-\/%]+$/.test(l)) {
+        // 数字の塊だが単位なし → ノイズ。無視
+      } else {
+        labels.push(l); // ラベル列
+      }
+    }
+
+    // 値は「G」「回」のみをラベル順に割当て（比率行は除外済み）
+    const labelToValue = {};
+    let vi = 0;
+    for (let li = 0; li < labels.length && vi < values.length; li++) {
+      const lab = labels[li];
+      const val = values[vi];
+      labelToValue[lab] = val;
+      vi++;
+    }
+
+    // 欲しいラベルたち（幅広い表記ゆれを許容）
+    function findByLabel(keys, wantUnit) {
+      const key = labels.find(lab => keys.some(re => re.test(lab)));
+      if (!key) return undefined;
+      const hit = labelToValue[key];
+      if (!hit) return undefined;
+      if (wantUnit && hit.unit !== wantUnit) return undefined;
+      return hit.value;
+    }
+
+    games  ??= findByLabel([/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i], "G");
+    bell   ??= findByLabel([/風鈴合算|風鈴\s*合算/i], "回");
+    cherry ??= findByLabel([/チェリー合算|チェリー\s*合算/i], "回");
+    ice    ??= findByLabel([/氷合算|氷\s*合算/i], "回");
+  }
+
+  return { games, bell, cherry, ice };
 }
 
+/* ===== 推測ロジック（変更なし） ===== */
 function estimateAllSettings(metrics) {
   const g = metrics.games || 0;
   if (!g) return [];
   const perG = {
-    bell: (metrics.bell || 0) / g,
+    bell:   (metrics.bell   || 0) / g,
     cherry: (metrics.cherry || 0) / g,
-    ice: (metrics.ice || 0) / g,
+    ice:    (metrics.ice    || 0) / g,
   };
   const core = PRESETS["新ハナビ"];
   const base = [1,2,5,6];
@@ -135,8 +199,8 @@ function estimateAllSettings(metrics) {
 }
 
 function barColor(p, maxP, minP) {
-  if (p === maxP) return "rgba(239,68,68,0.85)";
-  if (p === minP) return "rgba(147,197,253,0.85)";
+  if (p === maxP) return "rgba(239,68,68,0.85)";     // 赤
+  if (p === minP) return "rgba(147,197,253,0.85)";   // 水色
   const t = (p - minP) / Math.max(1, maxP - minP);
   const from = { r:147, g:197, b:253 };
   const to   = { r:59,  g:130, b:246 };
@@ -168,7 +232,7 @@ function renderMetrics() {
       const v = e.target.value === "" ? undefined : Number(e.target.value);
       state.metrics[k] = v;
       renderBars();
-      renderMetrics(); // update /G helper
+      renderMetrics(); // /G値の再描画
     };
     row.appendChild(input);
 
@@ -219,6 +283,7 @@ function setError(msg) {
   box.style.display = "block"; box.textContent = msg;
 }
 
+/* ===== 初期化 ===== */
 function init() {
   try {
     const sample = "総プレイ数 6,000G\n風鈴合算 780回\nチェリー合算 380回\n氷合算 110回";
@@ -232,6 +297,7 @@ function init() {
   const file = document.getElementById("file");
   const thumb = document.getElementById("thumb");
   const btnOcr = document.getElementById("btn-ocr");
+  const spin = document.getElementById("spin");
   const btnParse = document.getElementById("btn-parse");
   const text = document.getElementById("text");
 
@@ -245,53 +311,41 @@ function init() {
     btnOcr.classList.remove("disabled"); btnOcr.disabled = false;
   });
 
+  // ★ GitHub Pages でも確実に読める相対パスを算出
+  const TESS_BASE = new URL("./tesseract/", location.href).href;
+
   btnOcr.addEventListener("click", async ()=>{
     if (!state.imgUrl) return;
     setError("");
-    btnOcr.textContent = "OCR解析中...";
-    btnOcr.disabled = true;
+    btnOcr.disabled = true; spin.style.display="inline-block"; btnOcr.firstChild.textContent = "画像から解析";
     try {
-      // --- ここで Tesseract 本体が無ければCDNから即フォールバック ---
-      if (!window.Tesseract || !window.Tesseract.createWorker) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement("script");
-          s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-          s.onload = resolve;
-          s.onerror = reject;
-          document.head.appendChild(s);
-        });
-      }
-
       const { createWorker } = window.Tesseract || {};
-      if (!createWorker) {
-        throw new Error("Tesseract library not loaded");
-      }
-
-      // 相対パス（GitHub Pagesのプロジェクト配下を指す）
+      if (!createWorker) throw new Error("Tesseract not loaded");
       const worker = await createWorker({
-        workerPath: "tesseract/worker.min.js",
-        corePath:   "tesseract/tesseract-core.wasm.js",
-        langPath:   "tesseract/lang-data",
-        logger:     ()=>{},
+        // ★ 先頭スラッシュを使わず、相対パスで指定
+        workerPath: TESS_BASE + "worker.min.js",
+        corePath:   TESS_BASE + "tesseract-core.wasm.js",
+        langPath:   TESS_BASE + "lang-data",
+        logger: ()=>{},
       });
-
       await worker.loadLanguage("jpn+eng");
       await worker.initialize("jpn+eng");
       const { data } = await worker.recognize(state.imgUrl);
       await worker.terminate();
-
       const t = (data && data.text) || "";
       state.ocrText = t;
       text.value = t;
       state.metrics = parseMetricsFromText(t);
       renderMetrics();
       renderBars();
+      if (!state.metrics.games) {
+        setError("OCR結果から主要項目を特定できませんでした。テキスト欄で貼付け→「テキストから解析」をお試しください。");
+      }
     } catch (e) {
-      console.error(e);
-      setError("OCRが使用できません。tesseract/ の配置とファイル名、またはネットワーク制限を確認してください。テキスト貼り付け→解析でも続行できます。");
+      // ★ ここで“Failed to fetch”や404でも丁寧に案内
+      setError("OCRが使用できません。tesseract/ フォルダの配置とパスをご確認の上、テキスト貼付け→「テキストから解析」で続行できます。");
     } finally {
-      btnOcr.textContent = "画像から解析";
-      btnOcr.disabled = false;
+      btnOcr.disabled = false; spin.style.display="none";
     }
   });
 
@@ -301,7 +355,20 @@ function init() {
     state.metrics = parseMetricsFromText(state.ocrText);
     renderMetrics();
     renderBars();
+    if (!state.metrics.games) {
+      setError("総プレイ数（○○G）が見つかりませんでした。貼り付けたテキストをご確認ください。");
+    }
   });
+
+  // ★ tesseract.min.js を相対で「読み込み試行」（無くても動く）
+  (function tryLoadTesseract(){
+    const s = document.createElement("script");
+    s.src = TESS_BASE + "tesseract.min.js";
+    s.async = true;
+    s.onload = ()=>{};
+    s.onerror = ()=>{};
+    document.head.appendChild(s);
+  })();
 }
 
 init();
