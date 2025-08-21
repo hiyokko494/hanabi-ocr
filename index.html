@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ユニメモ解析｜新ハナビ（OCR / テキスト対応）</title>
+  <title>特リプTV｜新ハナビ（OCR / テキスト対応・拡張版）</title>
   <style>
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; margin: 24px; color: #111; }
     h1 { font-size: 20px; margin: 0 0 12px; }
@@ -16,10 +16,10 @@
     img.thumb { height: 112px; border: 1px solid #e5e7eb; border-radius: 8px; }
     .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-top: 12px; }
     .card h3 { margin: 0 0 8px; font-size: 14px; }
-    textarea { width: 100%; height: 140px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    textarea { width: 100%; height: 160px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
     .grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
     @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
-    label span.key { width: 72px; color: #6b7280; display: inline-block; }
+    label span.key { width: 92px; color: #6b7280; display: inline-block; }
     input[type="number"] { border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px; width: 100%; }
     .perg { font-size: 11px; color: #6b7280; width: 80px; text-align: right; }
     .bar-wrap { width: 100%; height: 16px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
@@ -32,11 +32,11 @@
   </style>
 </head>
 <body>
-  <h1>ユニメモ解析｜新ハナビ（OCR / テキスト対応）</h1>
+  <h1>特リプTV｜新ハナビ（OCR / テキスト対応・拡張版）</h1>
 
   <div class="hint">
-    <strong>使い方:</strong> スクショを選んで「画像から解析」。失敗や未準備なら、下のテキスト欄に貼り付けて「テキストから解析」。<br/>
-    iPhoneは画像を<strong>長押し → テキストをコピー</strong>でOK。貼り付けが「ラベル行 → 数値行」に分かれても自動で対応します。<br/>
+    <strong>使い方:</strong> スクショを選んで「画像から解析」。未準備や失敗時は下のテキスト欄に貼り付けて「テキストから解析」。<br/>
+    iPhoneは画像を<strong>長押し → テキストをコピー</strong>でOK。ラベル行と数値行が分かれても自動で対応します。<br/>
     ローカルOCRを使う場合は <code>tesseract/</code> に必要ファイルを置いてから再読み込み。
   </div>
 
@@ -64,7 +64,13 @@
 総プレイ数 6,056G
 風鈴合算 813回 1/7.4
 チェリー合算 381回 1/15.9
-氷合算 103回 1/58.8"></textarea>
+氷合算 103回 1/58.8
+花火チャレンジ中はずれ 83回
+1/6.1
+花火GAME中はずれ 42回
+1/13.0
+BB中 風鈴B(斜め風鈴) 8回
+1/11.0"></textarea>
   </div>
 
   <div class="card">
@@ -82,19 +88,57 @@
   </div>
 
 <script>
-/* ===== プリセット ===== */
+/* ===== プリセット（設定1/2/5/6） ===== */
 const PRESETS = {
   "新ハナビ": {
-    bell:   [1/7.7,  1/7.6,  1/7.5,  1/7.3],
-    cherry: [1/16.4, 1/15.3, 1/16.1, 1/15.6],
-    ice:    [1/51.2, 1/51.8, 1/48.2, 1/49.3],
+    // 通常時（合算＋内訳）
+    normal: {
+      bell:    [1/7.7,  1/7.6,  1/7.5,  1/7.3],
+      cherry:  [1/16.4, 1/15.3, 1/16.1, 1/15.6],
+      ice:     [1/51.2, 1/51.8, 1/48.2, 1/49.3],
+
+      bellA:   [1/15.3, 1/14.9, 1/14.5, 1/14.1],
+      bellB:   [1/15.3, 1/15.6, 1/15.3, 1/15.1],
+      iceA:    [1/52.9, 1/53.5, 1/49.6, 1/50.8],
+      iceB:    [1/1638.4,1/1638.4,1/1638.4,1/1638.4],
+      cherryA1:[1/99.4, 1/99.4, 1/99.3, 1/99.3],
+      cherryA2:[1/21.0, 1/19.3, 1/20.6, 1/19.9],
+      cherryB: [1/282.5,1/281.3,1/276.5,1/274.2],
+    },
+
+    // BIG中
+    bb: {
+      bellA:  [1/1.10, 1/1.13, 1/1.10, 1/1.13],  // 平行ベル
+      bellB:  [1/11.0, 1/9.0,  1/11.0, 1/9.0],   // 斜め風鈴（偶数強）
+      barake: [1/16384.0,1/16384.0,1/16384.0,1/655.4],
+    },
+
+    // REG中
+    rb: {
+      chalA:  [1/2.76, 1/2.76, 1/2.83, 1/2.83],
+      chalB:  [1/4.6,  1/4.6,  1/4.7,  1/4.7 ],
+      lucky:  [1/3.4,  1/3.4,  1/3.5,  1/3.5 ],
+      one:    [1/8.0,  1/8.0,  1/7.0,  1/7.0 ],
+      ice:    [1/198.6,1/198.6,1/198.6,1/198.6],
+      miss:   [null,    null,   1/376.6,1/376.6], // 5,6のみ
+    },
+
+    // RT中
+    rt: {
+      hc_miss:  [1/6.0,  1/5.8,  1/5.3,  1/5.1],   // 花火チャレンジ中 はずれ
+      hc_nrep:  [1/3.0,  1/3.1,  1/3.3,  1/3.4],   // 通常リプレイ
+      hc_jac:   [1/3.5,  null,   null,   null ],   // JACリプ（1のみ）
+      hg_miss:  [1/13.4, 1/12.4, 1/10.1, 1/9.5],  // 花火GAME中 はずれ
+      hg_rtrep: [1/1.75, 1/1.78, 1/1.85, 1/1.89], // RTリプ
+      hg_nrep:  [1/7.3,  null,   null,   null ],  // 通常リプ（1のみ）
+    },
   },
 };
 
 const state = {
   imgUrl: null,
   ocrText: "",
-  metrics: { games: undefined, bell: undefined, cherry: undefined, ice: undefined },
+  metrics: { games: undefined, bell: undefined, cherry: undefined, ice: undefined, extras: [] },
 };
 
 /* ===== ユーティリティ ===== */
@@ -105,12 +149,7 @@ function sanitize(s) {
     .replace(/\r/g, "");
 }
 
-const NUM_G       = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
-const NUM_KAI     = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
-const NUM_1DIV    = /^\s*1\s*\/\s*([0-9]+(?:\.[0-9]+)?)\s*$/;
-const NUM_PERCENT = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
-
-/* ===== テキスト → メトリクス抽出 ===== */
+/* ===== テキスト → メトリクス抽出（ノイズ除去・行分割対応・比率ひも付け） ===== */
 function parseMetricsFromText(rawText) {
   let text = sanitize(rawText || "");
   // OCRノイズ救済: 45n → 45回
@@ -118,79 +157,79 @@ function parseMetricsFromText(rawText) {
 
   let lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
 
-  // --- ノイズ除去：ヘッダー/日付/件数/タイトル類は弾く ---
+  // ノイズ除去（タイトル・日付・件数・「基本情報」など）
   const isNoise = (l) =>
     /^新ハナビ$/.test(l) ||
     /遊技履[歴履]全/.test(l) ||
     /^[12][0-9]{3}\/[01][0-9](?:-[0-9]+件)?$/.test(l) ||                     // 2025/08-1件
     /^[12][0-9]{3}\/[01][0-9]\/[0-3][0-9](?:\s+[0-2][0-9]:[0-5][0-9])?$/.test(l) || // 2025/08/13 20:29
     /^基本情報$/.test(l);
-
   lines = lines.filter(l => !isNoise(l));
 
-  // --- 開始位置の固定（基本情報 または コアラベルの最初） ---
+  // コア狙いのラベル
   const WANT = [
     { key: "games",  re: /総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, unit: "G"  , label:"総プレイ数" },
     { key: "bell",   re: /風鈴合算|風鈴\s*合算/i,                                   unit: "回" , label:"風鈴合算" },
     { key: "cherry", re: /チェリー合算|チェリー\s*合算/i,                           unit: "回" , label:"チェリー合算" },
     { key: "ice",    re: /氷合算|氷\s*合算/i,                                       unit: "回" , label:"氷合算" },
   ];
-  const firstCoreIdx = lines.findIndex(l => WANT.some(w => w.re.test(l)));
-  if (firstCoreIdx > 0) lines = lines.slice(firstCoreIdx);
 
-  // --- 同行インライン抽出（ラベルと値が同じ行） ---
+  // 同行インライン（ラベルと値が同じ行）
   const getInline = (labelRe, unitReg, numRE = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/) => {
     const line = lines.find(l => labelRe.test(l) && unitReg.test(l));
     if (!line) return undefined;
     const m = line.match(numRE);
     return m ? Number(m[1].replace(/,/g, "")) : undefined;
   };
-
   let games  = getInline(WANT[0].re, /G/i);
   let bell   = getInline(WANT[1].re, /回/);
   let cherry = getInline(WANT[2].re, /回/);
   let ice    = getInline(WANT[3].re, /回/);
 
-  // --- ストリーミング割当（コア優先 / その後にextras） ---
-  const NUM_G2       = NUM_G;
-  const NUM_KAI2     = NUM_KAI;
-  const NUM_RATIO    = /^\s*1\s*\/\s*[0-9]+(?:\.[0-9]+)?\s*$/;
-  const NUM_PERCENT2 = NUM_PERCENT;
-  const NUM_PLATES   = /^\s*[0-9,]+\s*枚\s*$/;
+  const NUM_G       = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
+  const NUM_KAI     = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
+  const NUM_RATIO   = /^\s*1\s*\/\s*([0-9]+(?:\.[0-9]+)?)\s*$/;
+  const NUM_PERCENT = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
+  const NUM_PLATES  = /^\s*[0-9,]+\s*枚\s*$/;
 
-  const extras = [];                 // 画面表示用：{label, unit, value}
-  const pendingCore = [];            // コア項目の待ち行列（単位付き）
-  const pendingExtra = [];           // 追加項目の待ち行列（単位なし優先）
+  const extras = [];             // {label, unit, value, ratio?}
+  const pendingCore = [];
+  const pendingExtra = [];
   const isLabelCandidate = (l) =>
-    /合算|総|BB|RB|風鈴|チェリー|氷|RT|GAME|チャレンジ|予告音|中段|斜め|押し順|成功|神技|獲得|枚|大花火|ドンちゃん|連チャン|はずれ|詳細|最大|降組/.test(l);
+    /合算|総|BB|RB|風鈴|チェリー|氷|RT|GAME|チャレンジ|予告音|中段|斜め|押し順|成功|神技|獲得|枚|大花火|ドンちゃん|連チャン|はずれ|詳細|最大|降組/i.test(l);
 
+  let lastAssignedExtra = null;  // 直前に確定した項目（ここに 1/xx を紐付け）
+
+  // 走査
   for (const line of lines) {
-    let valueInfo = null;
+    // 比率のみの行？ → 直前項目に 1/xx を付与
+    const r = line.match(NUM_RATIO);
+    if (r) {
+      const denom = parseFloat(r[1]);
+      if (lastAssignedExtra) lastAssignedExtra.ratio = denom;
+      continue;
+    }
 
-    if (NUM_G2.test(line)) {
-      const v = Number(line.replace(NUM_G2, "$1").replace(/,/g, ""));
-      valueInfo = { unit: "G", value: v };
-    } else if (NUM_KAI2.test(line)) {
-      const v = Number(line.replace(NUM_KAI2, "$1").replace(/,/g, ""));
-      valueInfo = { unit: "回", value: v };
-    } else if (NUM_RATIO.test(line) || NUM_PERCENT2.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
-      // 比率/％/枚/純数値の塊 → スキップ
+    let valueInfo = null;
+    if (NUM_G.test(line)) {
+      valueInfo = { unit: "G",  value: Number(line.replace(NUM_G, "$1").replace(/,/g, "")) };
+    } else if (NUM_KAI.test(line)) {
+      valueInfo = { unit: "回", value: Number(line.replace(NUM_KAI, "$1").replace(/,/g, "")) };
+    } else if (NUM_PERCENT.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
+      // 比率以外の数値塊はスキップ（必要なら拡張）
     } else {
-      // ラベル：まずコア、なければ候補ワードのみ extras
+      // ラベル検出：まずコア、なければ候補語のみ extras
       let matchedCore = false;
       for (const w of WANT) {
-        if (w.re.test(line)) {
-          pendingCore.push({ key: w.key, unit: w.unit, label: w.label });
-          matchedCore = true;
-        }
+        if (w.re.test(line)) { pendingCore.push({ key:w.key, unit:w.unit, label:w.label }); matchedCore = true; }
       }
       if (!matchedCore && isLabelCandidate(line)) {
-        pendingExtra.push({ key: null, unit: null, label: line });
+        pendingExtra.push({ key:null, unit:null, label:line });
       }
     }
 
     if (valueInfo) {
-      // 1) コア待ち行列（単位一致優先）
+      // 1) コア優先（単位一致）
       let idx = pendingCore.findIndex(p => p.unit === valueInfo.unit);
       if (idx !== -1) {
         const p = pendingCore.splice(idx,1)[0];
@@ -198,18 +237,20 @@ function parseMetricsFromText(rawText) {
         if (p.key === "bell"   && bell   == null) bell   = valueInfo.value;
         if (p.key === "cherry" && cherry == null) cherry = valueInfo.value;
         if (p.key === "ice"    && ice    == null) ice    = valueInfo.value;
-        extras.push({ label: p.label, unit: valueInfo.unit, value: valueInfo.value });
+        lastAssignedExtra = { label: p.label, unit: valueInfo.unit, value: valueInfo.value };
+        extras.push(lastAssignedExtra);
         continue;
       }
-      // 2) コアが無ければ extras へ割当て（先入れ先出し）
+      // 2) 余りは extras（先入れ先出し）
       if (pendingExtra.length) {
         const p = pendingExtra.shift();
-        extras.push({ label: p.label || "（ラベル）", unit: valueInfo.unit, value: valueInfo.value });
+        lastAssignedExtra = { label: p.label || "（ラベル）", unit: valueInfo.unit, value: valueInfo.value };
+        extras.push(lastAssignedExtra);
       }
     }
   }
 
-  // --- 最後の保険：どこかに1つだけある G を総プレイ数に採用 ---
+  // 総Gが無いときは、文中に「唯一」出現する G を採用（100G以内等の混入対策として“唯一”のみ）
   if (games == null) {
     const gHits = [...text.matchAll(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\b/ig)].map(m => Number(m[1].replace(/,/g,"")));
     const uniq = Array.from(new Set(gHits));
@@ -219,38 +260,93 @@ function parseMetricsFromText(rawText) {
   return { games, bell, cherry, ice, extras };
 }
 
-/* ===== 推測ロジック（Poisson尤度） ===== */
+/* ===== 推測ロジック（温度付きPoisson尤度 + extras採用） ===== */
 function estimateAllSettings(metrics) {
+  const core = PRESETS["新ハナビ"];
+  if (!core) return [];
   const g = metrics.games || 0;
-  if (!g) return [];
-  const obs = {
+
+  const obsCore = {
     bell:   metrics.bell   ?? 0,
     cherry: metrics.cherry ?? 0,
     ice:    metrics.ice    ?? 0,
   };
-  const core = PRESETS["新ハナビ"];
-  const base = [1,2,5,6];
 
-  const use = {
-    bell:   obs.bell   > 0,
-    cherry: obs.cherry > 0,
-    ice:    obs.ice    > 0,
-  };
+  // ラベル→プリセット表の対応
+  const MAP = [
+    // RT中
+    { re:/花火チャレンジ.*はずれ/i, path:["rt","hc_miss"] },
+    { re:/花火GAME.*はずれ/i,       path:["rt","hg_miss"] },
+    { re:/花火チャレンジ.*通常リプレイ|HC.*通常リプ/i, path:["rt","hc_nrep"] },
+    { re:/花火GAME.*RTリプレイ|HG.*RTリプ/i,         path:["rt","hg_rtrep"] },
+    { re:/花火チャレンジ.*JAC/i,    path:["rt","hc_jac"] },
+    { re:/花火GAME.*通常リプ/i,     path:["rt","hg_nrep"] },
+
+    // BB中
+    { re:/BB.*風鈴A|平行ベル|風鈴中段揃/i, path:["bb","bellA"] },
+    { re:/BB.*風鈴B|斜め風鈴|風斜め揃い/i, path:["bb","bellB"] },
+    { re:/BB.*バラケ目/i,               path:["bb","barake"] },
+
+    // RB中
+    { re:/RB.*チャレンジ役A/i, path:["rb","chalA"] },
+    { re:/RB.*チャレンジ役B/i, path:["rb","chalB"] },
+    { re:/RB.*ラッキー役/i,    path:["rb","lucky"] },
+    { re:/RB.*1枚役/i,         path:["rb","one"] },
+    { re:/RB.*氷|予告音氷/i,   path:["rb","ice"] },
+    { re:/RB.*ハズレ/i,        path:["rb","miss"] },
+
+    // 通常時（必要なら内訳も採用）
+    { re:/風鈴A\b/i, path:["normal","bellA"] },
+    { re:/風鈴B\b/i, path:["normal","bellB"] },
+    { re:/氷A\b/i,   path:["normal","iceA"]  },
+    { re:/氷B\b/i,   path:["normal","iceB"]  },
+    { re:/チェリーA1\b/i, path:["normal","cherryA1"] },
+    { re:/チェリーA2\b/i, path:["normal","cherryA2"] },
+    { re:/チェリーB\b/i,  path:["normal","cherryB"]  },
+  ];
+
+  let evidence = 0;
+  const base = [1,2,5,6];
 
   const rows = base.map((setting, idx) => {
     let loglik = 0;
-    if (use.bell)   { const denom = 1/core.bell[idx];   const lambda = g/denom;   loglik += obs.bell*Math.log(Math.max(lambda,1e-9)) - lambda; }
-    if (use.cherry) { const denom = 1/core.cherry[idx]; const lambda = g/denom;   loglik += obs.cherry*Math.log(Math.max(lambda,1e-9)) - lambda; }
-    if (use.ice)    { const denom = 1/core.ice[idx];    const lambda = g/denom;   loglik += obs.ice*Math.log(Math.max(lambda,1e-9)) - lambda; }
+
+    // 通常時の合算（総Gがあれば採用）
+    if (g > 0) {
+      if (obsCore.bell   > 0) { const p = core.normal.bell[idx];   const lambda = g * p; loglik += obsCore.bell  *Math.log(Math.max(lambda,1e-9)) - lambda; evidence++; }
+      if (obsCore.cherry > 0) { const p = core.normal.cherry[idx]; const lambda = g * p; loglik += obsCore.cherry*Math.log(Math.max(lambda,1e-9)) - lambda; evidence++; }
+      if (obsCore.ice    > 0) { const p = core.normal.ice[idx];    const lambda = g * p; loglik += obsCore.ice   *Math.log(Math.max(lambda,1e-9)) - lambda; evidence++; }
+    }
+
+    // extras：回数と 1/xx が揃っているものだけ評価（試行 ≒ 回数×xx）
+    for (const ex of (metrics.extras || [])) {
+      if (!ex || ex.value == null || ex.ratio == null) continue;
+      const m = MAP.find(m => m.re.test(ex.label));
+      if (!m) continue;
+      const table = core[m.path[0]] && core[m.path[0]][m.path[1]];
+      if (!table || table[idx] == null) continue; // その設定で定義なしはスキップ
+      const trials = Math.max(1, Math.round(ex.value * ex.ratio)); // 試行数
+      const p = table[idx];                                        // 設定ごとの出現率
+      const lambda = trials * p;
+      loglik += ex.value * Math.log(Math.max(lambda,1e-9)) - lambda;
+      evidence++;
+    }
+
     return { setting, loglik };
   });
 
+  if (!evidence) return [];
+
+  // 温度（エビデンス少ないときは強めにフラット化）
+  const TEMP = evidence <= 2 ? 2.0 : 1.4;
+
   const maxLL = Math.max(...rows.map(r=>r.loglik));
-  const exps = rows.map(r => Math.exp(r.loglik - maxLL));
+  const exps = rows.map(r => Math.exp((r.loglik - maxLL) / TEMP));
   const sum  = exps.reduce((a,b)=>a+b,0) || 1;
   return rows.map((r,i)=>({ setting:r.setting, percent: (exps[i]/sum)*100 }));
 }
 
+/* ===== 描画など ===== */
 function barColor(p, maxP, minP) {
   if (p === maxP) return "rgba(239,68,68,0.85)";     // 赤
   if (p === minP) return "rgba(147,197,253,0.85)";   // 水色
@@ -338,13 +434,13 @@ function renderExtracted() {
   const rows = ex.map(e => 
     `<tr><td style="padding:4px 8px;border:1px solid #e5e7eb;">${e.label}</td>
          <td style="padding:4px 8px;border:1px solid #e5e7eb;text-align:right;">${e.value}</td>
-         <td style="padding:4px 8px;border:1px solid #e5e7eb;">${e.unit || ""}</td></tr>`
+         <td style="padding:4px 8px;border:1px solid #e5e7eb;">${e.unit || ""}${e.ratio ? `（1/${e.ratio}）` : ""}</td></tr>`
   ).join("");
   mount.innerHTML = `<table style="border-collapse:collapse;font-size:12px;width:100%;">
     <thead><tr>
       <th style="text-align:left;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">項目</th>
-      <th style="text-align:right;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">値</th>
-      <th style="text-align:left;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">単位</th>
+      <th style="text-align:right;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">回数</th>
+      <th style="text-align:left;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">単位/分母</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
@@ -356,10 +452,10 @@ function setError(msg) {
   box.style.display = "block"; box.textContent = msg;
 }
 
-/* ===== 初期化 ===== */
+/* ===== 初期化・イベント ===== */
 function init() {
   try {
-    const sample = "総プレイ数 6,000G\n風鈴合算 780回\nチェリー合算 380回\n氷合算 110回";
+    const sample = "総プレイ数 6,000G\n風鈴合算 780回\nチェリー合算 380回\n氷合算 110回\n花火チャレンジ中はずれ 80回\n1/6.0";
     const m = parseMetricsFromText(sample);
     console.assert(m.games===6000 && m.bell===780 && m.cherry===380 && m.ice===110, "parse ok");
   } catch {}
@@ -444,7 +540,6 @@ function init() {
     document.head.appendChild(s);
   })();
 }
-
 init();
 </script>
 </body>
