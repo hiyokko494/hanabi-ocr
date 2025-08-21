@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>特リプTV｜新ハナビ｜思い出の数値</title>
+  <title>ユニメモ解析｜新ハナビ（OCR / テキスト対応）</title>
   <style>
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; margin: 24px; color: #111; }
     h1 { font-size: 20px; margin: 0 0 12px; }
@@ -32,12 +32,12 @@
   </style>
 </head>
 <body>
-  <h1>特リプTV｜新ハナビ｜思い出の数値</h1>
+  <h1>ユニメモ解析｜新ハナビ（OCR / テキスト対応）</h1>
 
   <div class="hint">
     <strong>使い方:</strong> スクショを選んで「画像から解析」。失敗や未準備なら、下のテキスト欄に貼り付けて「テキストから解析」。<br/>
     iPhoneは画像を<strong>長押し → テキストをコピー</strong>でOK。貼り付けが「ラベル行 → 数値行」に分かれても自動で対応します。<br/>
-    Option B（ローカル同梱）なら <code>tesseract/</code> フォルダに必要ファイルを置いてから再読み込み。
+    ローカルOCRを使う場合は <code>tesseract/</code> に必要ファイルを置いてから再読み込み。
   </div>
 
   <div id="err" class="error"></div>
@@ -78,7 +78,7 @@
   </div>
 
   <div class="footer">
-    ローカルOCR：<code>tesseract/</code> に <code>worker.min.js</code>、<code>tesseract-core.wasm.js</code>、<code>tesseract.min.js</code>、および <code>lang-data/jpn.traineddata.gz</code> と <code>lang-data/eng.traineddata.gz</code> を配置。
+    OCRをローカルで使う場合：<code>tesseract/</code> に <code>worker.min.js</code>、<code>tesseract-core.wasm.js</code>、<code>tesseract.min.js</code>、および <code>lang-data/jpn.traineddata.gz</code> と <code>lang-data/eng.traineddata.gz</code> を配置。
   </div>
 
 <script>
@@ -197,9 +197,6 @@ function parseMetricsFromText(rawText) {
 }
 
 /* ===== 推測ロジック（Poisson尤度） ===== */
-// 観測: 各カウント k は Poisson(λ) に従うとみなす。
-// 期待値 λ = 総ゲーム数 / 期待分母（例: 風鈴 1/7.7 → λ=games/7.7）
-// 設定ごとに log 尤度 Σ[k*ln(λ)-λ] を合算し、softmaxで％化。
 function estimateAllSettings(metrics) {
   const g = metrics.games || 0;
   if (!g) return [];
