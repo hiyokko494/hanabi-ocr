@@ -116,39 +116,53 @@ function parseMetricsFromText(rawText) {
   // OCRノイズ救済: 45n → 45回
   text = text.replace(/(\b[0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*[nN]\b/g, (_, num) => `${num}回`);
 
-  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  let lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
 
-  // 同行インライン抽出（ラベルと値が同じ行にある場合）
-  const getInline = (labelRe, unitReg, firstNumber = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/) => {
-    const line = lines.find(l => labelRe.test(l) && unitReg.test(l));
-    if (!line) return undefined;
-    const m = line.match(firstNumber);
-    return m ? Number(m[1].replace(/,/g, "")) : undefined;
-  };
+  // --- ノイズ除去：ヘッダー/日付/件数/タイトル類は弾く ---
+  const isNoise = (l) =>
+    /^新ハナビ$/.test(l) ||
+    /遊技履[歴履]全/.test(l) ||
+    /^[12][0-9]{3}\/[01][0-9](?:-[0-9]+件)?$/.test(l) ||                     // 2025/08-1件
+    /^[12][0-9]{3}\/[01][0-9]\/[0-3][0-9](?:\s+[0-2][0-9]:[0-5][0-9])?$/.test(l) || // 2025/08/13 20:29
+    /^基本情報$/.test(l);
 
-  let games  = getInline(/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, /G/i);
-  let bell   = getInline(/風鈴合算|風鈴\s*合算/i, /回/);
-  let cherry = getInline(/チェリー合算|チェリー\s*合算/i, /回/);
-  let ice    = getInline(/氷合算|氷\s*合算/i, /回/);
+  lines = lines.filter(l => !isNoise(l));
 
-  // 一覧出力用
-  const extras = []; // {label, unit, value}
-
-  // ストリーミング割当：ラベル検出→次に出る値（単位一致なら優先）を紐付け
+  // --- 開始位置の固定（基本情報 または コアラベルの最初） ---
   const WANT = [
     { key: "games",  re: /総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, unit: "G"  , label:"総プレイ数" },
     { key: "bell",   re: /風鈴合算|風鈴\s*合算/i,                                   unit: "回" , label:"風鈴合算" },
     { key: "cherry", re: /チェリー合算|チェリー\s*合算/i,                           unit: "回" , label:"チェリー合算" },
     { key: "ice",    re: /氷合算|氷\s*合算/i,                                       unit: "回" , label:"氷合算" },
   ];
+  const firstCoreIdx = lines.findIndex(l => WANT.some(w => w.re.test(l)));
+  if (firstCoreIdx > 0) lines = lines.slice(firstCoreIdx);
 
-  const NUM_G2       = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
-  const NUM_KAI2     = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
+  // --- 同行インライン抽出（ラベルと値が同じ行） ---
+  const getInline = (labelRe, unitReg, numRE = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/) => {
+    const line = lines.find(l => labelRe.test(l) && unitReg.test(l));
+    if (!line) return undefined;
+    const m = line.match(numRE);
+    return m ? Number(m[1].replace(/,/g, "")) : undefined;
+  };
+
+  let games  = getInline(WANT[0].re, /G/i);
+  let bell   = getInline(WANT[1].re, /回/);
+  let cherry = getInline(WANT[2].re, /回/);
+  let ice    = getInline(WANT[3].re, /回/);
+
+  // --- ストリーミング割当（コア優先 / その後にextras） ---
+  const NUM_G2       = NUM_G;
+  const NUM_KAI2     = NUM_KAI;
   const NUM_RATIO    = /^\s*1\s*\/\s*[0-9]+(?:\.[0-9]+)?\s*$/;
-  const NUM_PERCENT2 = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
+  const NUM_PERCENT2 = NUM_PERCENT;
   const NUM_PLATES   = /^\s*[0-9,]+\s*枚\s*$/;
 
-  const pending = []; // { key?, unit, label? }
+  const extras = [];                 // 画面表示用：{label, unit, value}
+  const pendingCore = [];            // コア項目の待ち行列（単位付き）
+  const pendingExtra = [];           // 追加項目の待ち行列（単位なし優先）
+  const isLabelCandidate = (l) =>
+    /合算|総|BB|RB|風鈴|チェリー|氷|RT|GAME|チャレンジ|予告音|中段|斜め|押し順|成功|神技|獲得|枚|大花火|ドンちゃん|連チャン|はずれ|詳細|最大|降組/.test(l);
 
   for (const line of lines) {
     let valueInfo = null;
@@ -160,37 +174,46 @@ function parseMetricsFromText(rawText) {
       const v = Number(line.replace(NUM_KAI2, "$1").replace(/,/g, ""));
       valueInfo = { unit: "回", value: v };
     } else if (NUM_RATIO.test(line) || NUM_PERCENT2.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
-      // 比率/％/枚/数値の塊はスキップ（必要なら拡張可）
+      // 比率/％/枚/純数値の塊 → スキップ
     } else {
-      // ラベル検出
-      let matchedWant = false;
-      for (const want of WANT) {
-        if (want.re.test(line)) {
-          pending.push({ key: want.key, unit: want.unit, label: want.label });
-          matchedWant = true;
+      // ラベル：まずコア、なければ候補ワードのみ extras
+      let matchedCore = false;
+      for (const w of WANT) {
+        if (w.re.test(line)) {
+          pendingCore.push({ key: w.key, unit: w.unit, label: w.label });
+          matchedCore = true;
         }
       }
-      if (!matchedWant) {
-        // 汎用ラベル（次に来るG/回をひも付け）
-        pending.push({ key: null, unit: null, label: line });
+      if (!matchedCore && isLabelCandidate(line)) {
+        pendingExtra.push({ key: null, unit: null, label: line });
       }
     }
 
-    if (valueInfo && pending.length) {
-      // 先頭から、単位が指定されていれば一致優先、なければ素直に割当て
-      let idx = -1;
-      for (let i=0;i<pending.length;i++) {
-        if (!pending[i].unit || pending[i].unit === valueInfo.unit) { idx = i; break; }
-      }
+    if (valueInfo) {
+      // 1) コア待ち行列（単位一致優先）
+      let idx = pendingCore.findIndex(p => p.unit === valueInfo.unit);
       if (idx !== -1) {
-        const p = pending.splice(idx,1)[0];
+        const p = pendingCore.splice(idx,1)[0];
         if (p.key === "games"  && games  == null) games  = valueInfo.value;
         if (p.key === "bell"   && bell   == null) bell   = valueInfo.value;
         if (p.key === "cherry" && cherry == null) cherry = valueInfo.value;
         if (p.key === "ice"    && ice    == null) ice    = valueInfo.value;
+        extras.push({ label: p.label, unit: valueInfo.unit, value: valueInfo.value });
+        continue;
+      }
+      // 2) コアが無ければ extras へ割当て（先入れ先出し）
+      if (pendingExtra.length) {
+        const p = pendingExtra.shift();
         extras.push({ label: p.label || "（ラベル）", unit: valueInfo.unit, value: valueInfo.value });
       }
     }
+  }
+
+  // --- 最後の保険：どこかに1つだけある G を総プレイ数に採用 ---
+  if (games == null) {
+    const gHits = [...text.matchAll(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\b/ig)].map(m => Number(m[1].replace(/,/g,"")));
+    const uniq = Array.from(new Set(gHits));
+    if (uniq.length === 1) games = uniq[0];
   }
 
   return { games, bell, cherry, ice, extras };
