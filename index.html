@@ -3,12 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>特リプTV｜パチスロ設定推測（データ画像 / テキスト対応・拡張版）</title>
+  <title>特リプTV｜パチスロ設定推測（画像 / テキスト対応・機種選択版）</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; margin: 24px; color: #111; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
+           margin: 24px; color: #111; }
     h1 { font-size: 20px; margin: 0 0 12px; }
     .hint { background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
-    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; display:none; }
+    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; }
     .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
     .btn { font-size: 13px; padding: 6px 10px; border-radius: 6px; border: 0; cursor: pointer; }
     .btn.primary { background: #111; color: #fff; }
@@ -16,10 +17,10 @@
     img.thumb { height: 112px; border: 1px solid #e5e7eb; border-radius: 8px; }
     .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-top: 12px; }
     .card h3 { margin: 0 0 8px; font-size: 14px; }
-    textarea { width: 100%; height: 160px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    textarea { width: 100%; height: 120px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
     .grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
     @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
-    label span.key { width: 92px; color: #6b7280; display: inline-block; }
+    label span.key { width: 140px; color: #374151; display: inline-block; }
     input[type="number"] { border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px; width: 100%; }
     .perg { font-size: 11px; color: #6b7280; width: 80px; text-align: right; }
     .bar-wrap { width: 100%; height: 16px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
@@ -27,31 +28,30 @@
     .rowline { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
     .footer { margin-top: 16px; font-size: 12px; color: #6b7280; }
     code { background: #f3f4f6; padding: 0 4px; border-radius: 4px; }
-    .spinner { display:none; width: 14px; height: 14px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; margin-left:6px; }
-    @keyframes spin { to { transform: rotate(360deg);} }
+    select#machine { min-width: 260px; max-width: 100%; white-space: nowrap; text-overflow: ellipsis; padding: 6px 8px; border-radius: 6px; border: 1px solid #e5e7eb; }
   </style>
 </head>
 <body>
-  <h1>特リプTV｜パチスロ設定推測（データ画像 / テキスト対応・拡張版）</h1>
+  <h1>特リプTV｜パチスロ設定推測（データ画像 / テキスト対応・機種選択版）</h1>
   <div class="hint">
-    <strong>使い方:</strong> ユニメモの場合、「画像にする」からスマホに画像を保存します。スマホの画像アルバムから保存された画像を選びます。画像からテキストを全選択し、テキストをコピーします（iPhone）。下のテキスト欄にそのままテキストをペーストします。テキストに編集を加えず、「テキストから解析」ボタンを押下すると、データが読み込まれます。<br/>
-<br/>
-「ファイル選択」からスマホに保存された画像をアップロードし、「画像から解析」ボタン押下で読み込む事が出来ない方は、「テキストから解析」をお試し下さい。
+    <strong>使い方:</strong> 先に「機種選択」をしてください。ユニメモの「画像にする」→保存した画像をアップロードし「画像から解析」または、画面のテキストをコピーして貼り付け「テキストから解析」で利用できます。
   </div>
 
-  <div id="err" class="error"></div>
+  <div id="err" class="error" style="display:none"></div>
+
+  <div class="row">
+    <label for="machine"><strong>機種選択：</strong></label>
+    <select id="machine">
+      <option>新ハナビ</option>
+      <option>バーサス・リヴァイズ</option>
+      <option>アレックス・ブライト</option>
+    </select>
+  </div>
 
   <div class="row">
     <input id="file" type="file" accept="image/*" />
     <img id="thumb" class="thumb" style="display:none" alt="preview"/>
-    <button id="btn-ocr" class="btn primary disabled" disabled>
-      画像から解析 <span id="spin" class="spinner"></span>
-    </button>
-  </div>
-
-  <div class="card">
-    <h3>抽出一覧（貼り付けテキストから拾えた項目）</h3>
-    <div id="extracted">まだ抽出結果がありません。</div>
+    <button id="btn-ocr" class="btn primary disabled" disabled>画像から解析</button>
   </div>
 
   <div class="card">
@@ -60,16 +60,10 @@
       <button id="btn-parse" class="btn" style="background:#2563eb; color:#fff;">テキストから解析</button>
     </div>
     <textarea id="text" placeholder="例)
-総プレイ数 6,056G
-風鈴合算 813回 1/7.4
-チェリー合算 381回 1/15.9
-氷合算 103回 1/58.8
-花火チャレンジ中はずれ 83回
-1/6.1
-花火GAME中はずれ 42回
-1/13.0
-BB中 風鈴B(斜め風鈴) 8回
-1/11.0"></textarea>
+総プレイ数 6,000G
+風鈴合算 780回
+チェリー合算 380回
+氷合算 110回"></textarea>
   </div>
 
   <div class="card">
@@ -83,462 +77,131 @@ BB中 風鈴B(斜め風鈴) 8回
   </div>
 
   <div class="footer">
-    OCRをローカルで使う場合：<code>tesseract/</code> に <code>worker.min.js</code>、<code>tesseract-core.wasm.js</code>、<code>tesseract.min.js</code>、および <code>lang-data/jpn.traineddata.gz</code> と <code>lang-data/eng.traineddata.gz</code> を配置。
+    ローカルOCR：<code>/tesseract/</code> に <code>worker.min.js</code>, <code>tesseract-core.wasm.js</code>, <code>lang-data/jpn.traineddata.gz</code>, <code>lang-data/eng.traineddata.gz</code> を配置。
   </div>
 
 <script>
-/* ===== プリセット（設定1/2/5/6） ===== */
+/** 各機種の設定期待値 (/G) */
 const PRESETS = {
   "新ハナビ": {
-    // 通常時（合算＋内訳）
-    normal: {
-      bell:    [1/7.7,  1/7.6,  1/7.5,  1/7.3],
-      cherry:  [1/16.4, 1/15.3, 1/16.1, 1/15.6],
-      ice:     [1/51.2, 1/51.8, 1/48.2, 1/49.3],
-
-      bellA:   [1/15.3, 1/14.9, 1/14.5, 1/14.1],
-      bellB:   [1/15.3, 1/15.6, 1/15.3, 1/15.1],
-      iceA:    [1/52.9, 1/53.5, 1/49.6, 1/50.8],
-      iceB:    [1/1638.4,1/1638.4,1/1638.4,1/1638.4],
-      cherryA1:[1/99.4, 1/99.4, 1/99.3, 1/99.3],
-      cherryA2:[1/21.0, 1/19.3, 1/20.6, 1/19.9],
-      cherryB: [1/282.5,1/281.3,1/276.5,1/274.2],
+    keys: ["bell","cherry","ice"],
+    label: { games:"総G", bell:"風鈴合算", cherry:"チェリー合算", ice:"氷合算" },
+    parse: {
+      games:[/総プレイ数|総ゲーム|ゲーム数|回転数/i],
+      bell:[/風鈴合算/i],
+      cherry:[/チェリー合算/i],
+      ice:[/氷合算/i]
     },
-
-    // BIG中
-    bb: {
-      bellA:  [1/1.10, 1/1.13, 1/1.10, 1/1.13],  // 平行ベル
-      bellB:  [1/11.0, 1/9.0,  1/11.0, 1/9.0],   // 斜め風鈴（偶数強）
-      barake: [1/16384.0,1/16384.0,1/16384.0,1/655.4],
-    },
-
-    // REG中
-    rb: {
-      chalA:  [1/2.76, 1/2.76, 1/2.83, 1/2.83],
-      chalB:  [1/4.6,  1/4.6,  1/4.7,  1/4.7 ],
-      lucky:  [1/3.4,  1/3.4,  1/3.5,  1/3.5 ],
-      one:    [1/8.0,  1/8.0,  1/7.0,  1/7.0 ],
-      ice:    [1/198.6,1/198.6,1/198.6,1/198.6],
-      miss:   [null,    null,   1/376.6,1/376.6], // 5,6のみ
-    },
-
-    // RT中
-    rt: {
-      hc_miss:  [1/6.0,  1/5.8,  1/5.3,  1/5.1],   // 花火チャレンジ中 はずれ
-      hc_nrep:  [1/3.0,  1/3.1,  1/3.3,  1/3.4],   // 通常リプレイ
-      hc_jac:   [1/3.5,  null,   null,   null ],   // JACリプ（1のみ）
-      hg_miss:  [1/13.4, 1/12.4, 1/10.1, 1/9.5],  // 花火GAME中 はずれ
-      hg_rtrep: [1/1.75, 1/1.78, 1/1.85, 1/1.89], // RTリプ
-      hg_nrep:  [1/7.3,  null,   null,   null ],  // 通常リプ（1のみ）
-    },
+    expect: {
+      bell:[1/7.7,1/7.6,1/7.5,1/7.3],
+      cherry:[1/16.4,1/15.3,1/16.1,1/15.6],
+      ice:[1/51.2,1/51.8,1/48.2,1/49.3],
+    }
   },
-};
-
-const state = {
-  imgUrl: null,
-  ocrText: "",
-  metrics: { games: undefined, bell: undefined, cherry: undefined, ice: undefined, extras: [] },
-};
-
-/* ===== ユーティリティ ===== */
-function sanitize(s) {
-  return (s || "")
-    .replace(/[０-９]/g, d => String.fromCharCode(d.charCodeAt(0) - 0xFEE0))
-    .replace(/[，]/g, ",").replace(/[．]/g, ".").replace(/[　]/g, " ")
-    .replace(/\r/g, "");
-}
-
-/* ===== テキスト → メトリクス抽出（ノイズ除去・行分割対応・比率ひも付け） ===== */
-function parseMetricsFromText(rawText) {
-  let text = sanitize(rawText || "");
-  // OCRノイズ救済: 45n → 45回
-  text = text.replace(/(\b[0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*[nN]\b/g, (_, num) => `${num}回`);
-
-  let lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
-
-  // ノイズ除去（タイトル・日付・件数・「基本情報」など）
-  const isNoise = (l) =>
-    /^新ハナビ$/.test(l) ||
-    /遊技履[歴履]全/.test(l) ||
-    /^[12][0-9]{3}\/[01][0-9](?:-[0-9]+件)?$/.test(l) ||                     // 2025/08-1件
-    /^[12][0-9]{3}\/[01][0-9]\/[0-3][0-9](?:\s+[0-2][0-9]:[0-5][0-9])?$/.test(l) || // 2025/08/13 20:29
-    /^基本情報$/.test(l);
-  lines = lines.filter(l => !isNoise(l));
-
-  // コア狙いのラベル
-  const WANT = [
-    { key: "games",  re: /総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i, unit: "G"  , label:"総プレイ数" },
-    { key: "bell",   re: /風鈴合算|風鈴\s*合算/i,                                   unit: "回" , label:"風鈴合算" },
-    { key: "cherry", re: /チェリー合算|チェリー\s*合算/i,                           unit: "回" , label:"チェリー合算" },
-    { key: "ice",    re: /氷合算|氷\s*合算/i,                                       unit: "回" , label:"氷合算" },
-  ];
-
-  // 同行インライン（ラベルと値が同じ行）
-  const getInline = (labelRe, unitReg, numRE = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/) => {
-    const line = lines.find(l => labelRe.test(l) && unitReg.test(l));
-    if (!line) return undefined;
-    const m = line.match(numRE);
-    return m ? Number(m[1].replace(/,/g, "")) : undefined;
-  };
-  let games  = getInline(WANT[0].re, /G/i);
-  let bell   = getInline(WANT[1].re, /回/);
-  let cherry = getInline(WANT[2].re, /回/);
-  let ice    = getInline(WANT[3].re, /回/);
-
-  const NUM_G       = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\s*$/i;
-  const NUM_KAI     = /^\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\s*$/;
-  const NUM_RATIO   = /^\s*1\s*\/\s*([0-9]+(?:\.[0-9]+)?)\s*$/;
-  const NUM_PERCENT = /^\s*[0-9]+(?:\.[0-9]+)?\s*%\s*$/;
-  const NUM_PLATES  = /^\s*[0-9,]+\s*枚\s*$/;
-
-  const extras = [];             // {label, unit, value, ratio?}
-  const pendingCore = [];
-  const pendingExtra = [];
-  const isLabelCandidate = (l) =>
-    /合算|総|BB|RB|風鈴|チェリー|氷|RT|GAME|チャレンジ|予告音|中段|斜め|押し順|成功|神技|獲得|枚|大花火|ドンちゃん|連チャン|はずれ|詳細|最大|降組/i.test(l);
-
-  let lastAssignedExtra = null;  // 直前に確定した項目（ここに 1/xx を紐付け）
-
-  // 走査
-  for (const line of lines) {
-    // 比率のみの行？ → 直前項目に 1/xx を付与
-    const r = line.match(NUM_RATIO);
-    if (r) {
-      const denom = parseFloat(r[1]);
-      if (lastAssignedExtra) lastAssignedExtra.ratio = denom;
-      continue;
+  "バーサス・リヴァイズ": {
+    keys:["bell","suika","cherry","vsg_hz"],
+    label:{ games:"総G", bell:"ベル合算", suika:"スイカ合算", cherry:"チェリー合算", vsg_hz:"VS GAME中はずれ" },
+    parse:{
+      games:[/総プレイ数|総ゲーム|ゲーム数|回転数/i],
+      bell:[/ベル合算/i],
+      suika:[/スイカ合算/i],
+      cherry:[/チェリー合算/i],
+      vsg_hz:[/VS\s*GAME.*はずれ/i]
+    },
+    expect:{
+      bell:[1/7.2,1/7.1,1/6.9,1/6.8],
+      suika:[1/55.5,1/53.4,1/54.4,1/52.3],
+      cherry:[1/38.2,1/38.9,1/36.7,1/37.3],
+      vsg_hz:[1/10.1,1/9.4,1/8.7,1/8.1],
     }
-
-    let valueInfo = null;
-    if (NUM_G.test(line)) {
-      valueInfo = { unit: "G",  value: Number(line.replace(NUM_G, "$1").replace(/,/g, "")) };
-    } else if (NUM_KAI.test(line)) {
-      valueInfo = { unit: "回", value: Number(line.replace(NUM_KAI, "$1").replace(/,/g, "")) };
-    } else if (NUM_PERCENT.test(line) || NUM_PLATES.test(line) || /^[0-9,.\-\/%]+$/.test(line)) {
-      // 比率以外の数値塊はスキップ（必要なら拡張）
-    } else {
-      // ラベル検出：まずコア、なければ候補語のみ extras
-      let matchedCore = false;
-      for (const w of WANT) {
-        if (w.re.test(line)) { pendingCore.push({ key:w.key, unit:w.unit, label:w.label }); matchedCore = true; }
-      }
-      if (!matchedCore && isLabelCandidate(line)) {
-        pendingExtra.push({ key:null, unit:null, label:line });
-      }
-    }
-
-    if (valueInfo) {
-      // 1) コア優先（単位一致）
-      let idx = pendingCore.findIndex(p => p.unit === valueInfo.unit);
-      if (idx !== -1) {
-        const p = pendingCore.splice(idx,1)[0];
-        if (p.key === "games"  && games  == null) games  = valueInfo.value;
-        if (p.key === "bell"   && bell   == null) bell   = valueInfo.value;
-        if (p.key === "cherry" && cherry == null) cherry = valueInfo.value;
-        if (p.key === "ice"    && ice    == null) ice    = valueInfo.value;
-        lastAssignedExtra = { label: p.label, unit: valueInfo.unit, value: valueInfo.value };
-        extras.push(lastAssignedExtra);
-        continue;
-      }
-      // 2) 余りは extras（先入れ先出し）
-      if (pendingExtra.length) {
-        const p = pendingExtra.shift();
-        lastAssignedExtra = { label: p.label || "（ラベル）", unit: valueInfo.unit, value: valueInfo.value };
-        extras.push(lastAssignedExtra);
-      }
+  },
+  "アレックス・ブライト": {
+    keys:["hane","three","cherryA","cherryB","budou"],
+    label:{ games:"総G", hane:"羽合算", three:"3枚役", cherryA:"チェリーA合算", cherryB:"チェリーB", budou:"ブドウ合算" },
+    parse:{
+      games:[/総プレイ数|総ゲーム|ゲーム数|回転数/i],
+      hane:[/羽合算/i],
+      three:[/3枚役/i],
+      cherryA:[/チェリーA合算/i],
+      cherryB:[/チェリーB/i],
+      budou:[/ブドウ合算/i],
+    },
+    expect:{
+      hane:[1/13.4,1/13.0,1/12.6,1/12.2],
+      three:[1/40.5,1/38.1,1/39.2,1/38.3],
+      cherryA:[1/28.3,1/28.4,1/26.6,1/26.5],
+      cherryB:[1/82.6,1/82.1,1/78.8,1/76.7],
+      budou:[1/256.0,null,null,null], // 不明は null
     }
   }
+};
 
-  // 総Gが無いときは、文中に「唯一」出現する G を採用（100G以内等の混入対策として“唯一”のみ）
-  if (games == null) {
-    const gHits = [...text.matchAll(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\b/ig)].map(m => Number(m[1].replace(/,/g,"")));
-    const uniq = Array.from(new Set(gHits));
-    if (uniq.length === 1) games = uniq[0];
-  }
+const state = { machine:"新ハナビ", imgUrl:null, ocrText:"", metrics:{} };
 
-  return { games, bell, cherry, ice, extras };
+function sanitize(s){
+  return s.replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
+          .replace(/[，]/g,",").replace(/[．]/g,".").replace(/[　]/g," ");
 }
 
-/* ===== 推測ロジック（温度付きPoisson尤度 + extras採用） ===== */
-function estimateAllSettings(metrics) {
-  const core = PRESETS["新ハナビ"];
-  if (!core) return [];
-  const g = metrics.games || 0;
+function pickInt(line){ const m=line?.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/); return m?Number(m[1].replace(/,/g,"")):undefined; }
 
-  const obsCore = {
-    bell:   metrics.bell   ?? 0,
-    cherry: metrics.cherry ?? 0,
-    ice:    metrics.ice    ?? 0,
-  };
+function parseMetricsFromText(machine,text){
+  const lines=sanitize(text).split(/\r?\n/);
+  const cfg=PRESETS[machine]; const out={};
+  for(const k of ["games",...cfg.keys]){
+    const pats=cfg.parse[k]||[]; const line=lines.find(l=>pats.some(re=>re.test(l))); out[k]=pickInt(line);
+  }
+  return out;
+}
 
-  // ラベル→プリセット表の対応
-  const MAP = [
-    // RT中
-    { re:/花火チャレンジ.*はずれ/i, path:["rt","hc_miss"] },
-    { re:/花火GAME.*はずれ/i,       path:["rt","hg_miss"] },
-    { re:/花火チャレンジ.*通常リプレイ|HC.*通常リプ/i, path:["rt","hc_nrep"] },
-    { re:/花火GAME.*RTリプレイ|HG.*RTリプ/i,         path:["rt","hg_rtrep"] },
-    { re:/花火チャレンジ.*JAC/i,    path:["rt","hc_jac"] },
-    { re:/花火GAME.*通常リプ/i,     path:["rt","hg_nrep"] },
-
-    // BB中
-    { re:/BB.*風鈴A|平行ベル|風鈴中段揃/i, path:["bb","bellA"] },
-    { re:/BB.*風鈴B|斜め風鈴|風斜め揃い/i, path:["bb","bellB"] },
-    { re:/BB.*バラケ目/i,               path:["bb","barake"] },
-
-    // RB中
-    { re:/RB.*チャレンジ役A/i, path:["rb","chalA"] },
-    { re:/RB.*チャレンジ役B/i, path:["rb","chalB"] },
-    { re:/RB.*ラッキー役/i,    path:["rb","lucky"] },
-    { re:/RB.*1枚役/i,         path:["rb","one"] },
-    { re:/RB.*氷|予告音氷/i,   path:["rb","ice"] },
-    { re:/RB.*ハズレ/i,        path:["rb","miss"] },
-
-    // 通常時（必要なら内訳も採用）
-    { re:/風鈴A\b/i, path:["normal","bellA"] },
-    { re:/風鈴B\b/i, path:["normal","bellB"] },
-    { re:/氷A\b/i,   path:["normal","iceA"]  },
-    { re:/氷B\b/i,   path:["normal","iceB"]  },
-    { re:/チェリーA1\b/i, path:["normal","cherryA1"] },
-    { re:/チェリーA2\b/i, path:["normal","cherryA2"] },
-    { re:/チェリーB\b/i,  path:["normal","cherryB"]  },
-  ];
-
-  let evidence = 0;
-  const base = [1,2,5,6];
-
-  const rows = base.map((setting, idx) => {
-    let loglik = 0;
-
-    // 通常時の合算（総Gがあれば採用）
-    if (g > 0) {
-      if (obsCore.bell   > 0) { const p = core.normal.bell[idx];   const lambda = g * p; loglik += obsCore.bell  *Math.log(Math.max(lambda,1e-9)) - lambda; evidence++; }
-      if (obsCore.cherry > 0) { const p = core.normal.cherry[idx]; const lambda = g * p; loglik += obsCore.cherry*Math.log(Math.max(lambda,1e-9)) - lambda; evidence++; }
-      if (obsCore.ice    > 0) { const p = core.normal.ice[idx];    const lambda = g * p; loglik += obsCore.ice   *Math.log(Math.max(lambda,1e-9)) - lambda; evidence++; }
-    }
-
-    // extras：回数と 1/xx が揃っているものだけ評価（試行 ≒ 回数×xx）
-    for (const ex of (metrics.extras || [])) {
-      if (!ex || ex.value == null || ex.ratio == null) continue;
-      const m = MAP.find(m => m.re.test(ex.label));
-      if (!m) continue;
-      const table = core[m.path[0]] && core[m.path[0]][m.path[1]];
-      if (!table || table[idx] == null) continue; // その設定で定義なしはスキップ
-      const trials = Math.max(1, Math.round(ex.value * ex.ratio)); // 試行数
-      const p = table[idx];                                        // 設定ごとの出現率
-      const lambda = trials * p;
-      loglik += ex.value * Math.log(Math.max(lambda,1e-9)) - lambda;
-      evidence++;
-    }
-
-    return { setting, loglik };
+function estimateAllSettings(machine,metrics){
+  const cfg=PRESETS[machine]; const g=metrics.games||0; if(!g)return[];
+  const perG={}; cfg.keys.forEach(k=>{ if(metrics[k]!=null) perG[k]=(metrics[k]||0)/g; });
+  const base=[1,2,5,6];
+  const rows=base.map((s,i)=>{ let err=0,used=0;
+    cfg.keys.forEach(k=>{ if(perG[k]==null||cfg.expect[k][i]==null) return; err+=Math.pow(perG[k]-cfg.expect[k][i],2); used++; });
+    return {setting:s, score:used?1/(1+err):0, percent:0};
   });
-
-  if (!evidence) return [];
-
-  // 温度（エビデンス少ないときは強めにフラット化）
-  const TEMP = evidence <= 2 ? 2.0 : 1.4;
-
-  const maxLL = Math.max(...rows.map(r=>r.loglik));
-  const exps = rows.map(r => Math.exp((r.loglik - maxLL) / TEMP));
-  const sum  = exps.reduce((a,b)=>a+b,0) || 1;
-  return rows.map((r,i)=>({ setting:r.setting, percent: (exps[i]/sum)*100 }));
+  const sum=rows.reduce((a,b)=>a+b.score,0)||1; rows.forEach(r=>r.percent=r.score/sum*100); return rows;
 }
 
-/* ===== 描画など ===== */
-function barColor(p, maxP, minP) {
-  if (p === maxP) return "rgba(239,68,68,0.85)";     // 赤
-  if (p === minP) return "rgba(147,197,253,0.85)";   // 水色
-  const t = (p - minP) / Math.max(1, maxP - minP);
-  const from = { r:147, g:197, b:253 };
-  const to   = { r:59,  g:130, b:246 };
-  const r = Math.round(from.r + (to.r - from.r)*t);
-  const g = Math.round(from.g + (to.g - from.g)*t);
-  const b = Math.round(from.b + (to.b - from.b)*t);
-  return `rgba(${r},${g},${b},0.9)`;
+function barColor(p,max,min){
+  if(p===max) return"rgba(239,68,68,0.85)";
+  if(p===min) return"rgba(147,197,253,0.85)";
+  const t=(p-min)/Math.max(1,max-min); const r=147+(59-147)*t, g=197+(130-197)*t, b=253+(246-253)*t;
+  return`rgba(${r},${g},${b},0.9)`;
 }
 
-function renderMetrics() {
-  const wrap = document.getElementById("metrics");
-  wrap.innerHTML = "";
-  const keys = ["games", "bell", "cherry", "ice"];
-  keys.forEach((k) => {
-    const row = document.createElement("label");
-    row.style.display = "flex";
-    row.style.alignItems = "center";
-    row.style.gap = "8px";
-
-    const keySpan = document.createElement("span");
-    keySpan.className = "key";
-    keySpan.textContent = k;
-    row.appendChild(keySpan);
-
-    const input = document.createElement("input");
-    input.type = "number";
-    input.value = state.metrics[k] ?? "";
-    input.oninput = (e)=>{
-      const v = e.target.value === "" ? undefined : Number(e.target.value);
-      state.metrics[k] = v;
-      renderBars();
-      renderMetrics(); // /G値の再描画
-    };
-    row.appendChild(input);
-
-    const tail = document.createElement("span");
-    tail.className = "perg";
-    if (k !== "games" && state.metrics.games) {
-      const val = ( (state.metrics[k] || 0) / (state.metrics.games || 1) ).toFixed(4);
-      tail.textContent = "/G " + val;
-    } else {
-      tail.textContent = "";
-    }
-    row.appendChild(tail);
-
+function renderMetrics(){
+  const wrap=document.getElementById("metrics"); wrap.innerHTML=""; const cfg=PRESETS[state.machine]; const keys=["games",...cfg.keys];
+  keys.forEach(k=>{
+    const row=document.createElement("label"); row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
+    const keySpan=document.createElement("span"); keySpan.className="key"; keySpan.textContent=cfg.label[k]||k; row.appendChild(keySpan);
+    const input=document.createElement("input"); input.type="number"; input.value=state.metrics[k]??""; input.oninput=e=>{state.metrics[k]=e.target.value===""?undefined:Number(e.target.value); renderBars(); renderMetrics();}; row.appendChild(input);
+    const tail=document.createElement("span"); tail.className="perg"; if(k!=="games"&&state.metrics.games){tail.textContent="/G "+(((state.metrics[k]||0)/(state.metrics.games||1)).toFixed(4));} row.appendChild(tail);
     wrap.appendChild(row);
   });
 }
 
-function renderBars() {
-  const mount = document.getElementById("bars");
-  const rows = estimateAllSettings(state.metrics);
-  if (!rows.length) {
-    mount.textContent = "必要な数値が揃うと比較グラフが表示されます。";
-    return;
-  }
-  const perc = rows.map(r=>r.percent);
-  const maxP = Math.max(...perc);
-  const minP = Math.min(...perc);
-  mount.innerHTML = "";
-  rows.forEach((r)=>{
-    const head = document.createElement("div");
-    head.className = "rowline";
-    head.innerHTML = `<span class="label">設定${r.setting}</span><span>${r.percent.toFixed(2)}%</span>`;
-    const barWrap = document.createElement("div");
-    barWrap.className = "bar-wrap";
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    bar.style.width = Math.max(0, Math.min(100, r.percent)) + "%";
-    bar.style.background = barColor(r.percent, maxP, minP);
-    barWrap.appendChild(bar);
-    mount.appendChild(head);
-    mount.appendChild(barWrap);
-  });
+function renderBars(){
+  const mount=document.getElementById("bars"); const rows=estimateAllSettings(state.machine,state.metrics); if(!rows.length){mount.textContent="必要な数値が揃うと比較グラフが表示されます。";return;}
+  const perc=rows.map(r=>r.percent), max=Math.max(...perc), min=Math.min(...perc); mount.innerHTML="";
+  rows.forEach(r=>{ const head=document.createElement("div"); head.className="rowline"; head.innerHTML=`<span>${state.machine}｜設定${r.setting}</span><span>${r.percent.toFixed(2)}%</span>`;
+    const barWrap=document.createElement("div"); barWrap.className="bar-wrap"; const bar=document.createElement("div"); bar.className="bar"; bar.style.width=Math.max(0,Math.min(100,r.percent))+"%"; bar.style.background=barColor(r.percent,max,min); barWrap.appendChild(bar);
+    mount.appendChild(head); mount.appendChild(barWrap); });
 }
 
-function renderExtracted() {
-  const mount = document.getElementById("extracted");
-  if (!mount) return;
-  const ex = state.metrics.extras || [];
-  if (!ex.length) { mount.textContent = "まだ抽出結果がありません。"; return; }
-  const rows = ex.map(e => 
-    `<tr><td style="padding:4px 8px;border:1px solid #e5e7eb;">${e.label}</td>
-         <td style="padding:4px 8px;border:1px solid #e5e7eb;text-align:right;">${e.value}</td>
-         <td style="padding:4px 8px;border:1px solid #e5e7eb;">${e.unit || ""}${e.ratio ? `（1/${e.ratio}）` : ""}</td></tr>`
-  ).join("");
-  mount.innerHTML = `<table style="border-collapse:collapse;font-size:12px;width:100%;">
-    <thead><tr>
-      <th style="text-align:left;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">項目</th>
-      <th style="text-align:right;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">回数</th>
-      <th style="text-align:left;padding:4px 8px;border:1px solid #e5e7eb;background:#f9fafb;">単位/分母</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+function setError(msg){ const box=document.getElementById("err"); if(!msg){box.style.display="none"; box.textContent=""; return;} box.style.display="block"; box.textContent=msg; }
+
+function init(){
+  state.machine=document.getElementById("machine").value; state.metrics={}; renderMetrics(); renderBars();
+  document.getElementById("machine").addEventListener("change",()=>{state.machine=document.getElementById("machine").value; state.metrics={}; renderMetrics(); renderBars();});
+  const file=document.getElementById("file"), thumb=document.getElementById("thumb"), btnOcr=document.getElementById("btn-ocr"), btnParse=document.getElementById("btn-parse"), text=document.getElementById("text");
+  file.addEventListener("change",e=>{setError(""); const f=e.target.files&&e.target.files[0]; if(!f){thumb.style.display="none"; state.imgUrl=null; btnOcr.classList.add("disabled"); btnOcr.disabled=true; return;} const url=URL.createObjectURL(f); state.imgUrl=url; thumb.src=url; thumb.style.display="inline-block"; btnOcr.classList.remove("disabled"); btnOcr.disabled=false;});
+  btnOcr.addEventListener("click",async()=>{ if(!state.imgUrl)return; setError(""); btnOcr.textContent="OCR解析中..."; btnOcr.disabled=true; try{ const {createWorker}=window.Tesseract||{}; if(!createWorker)throw new Error("Tesseract not loaded"); const worker=await createWorker({workerPath:"/tesseract/worker.min.js",corePath:"/tesseract/tesseract-core.wasm.js",langPath:"/tesseract/lang-data",logger:()=>{}}); await worker.loadLanguage("jpn+eng"); await worker.initialize("jpn+eng"); const {data}=await worker.recognize(state.imgUrl); await worker.terminate(); const t=(data&&data.text)||""; state.ocrText=t; text.value=t; state.metrics=parseMetricsFromText(state.machine,t); renderMetrics(); renderBars(); }catch(e){ setError("OCRが使用できません。/tesseract/ に必要ファイルを配置するか、テキストから解析を使用してください。"); }finally{ btnOcr.textContent="画像から解析"; btnOcr.disabled=false; }});
+  btnParse.addEventListener("click",()=>{ setError(""); state.ocrText=text.value||""; state.metrics=parseMetricsFromText(state.machine,state.ocrText); renderMetrics(); renderBars();});
 }
-
-function setError(msg) {
-  const box = document.getElementById("err");
-  if (!msg) { box.style.display = "none"; box.textContent = ""; return; }
-  box.style.display = "block"; box.textContent = msg;
-}
-
-/* ===== 初期化・イベント ===== */
-function init() {
-  try {
-    const sample = "総プレイ数 6,000G\n風鈴合算 780回\nチェリー合算 380回\n氷合算 110回\n花火チャレンジ中はずれ 80回\n1/6.0";
-    const m = parseMetricsFromText(sample);
-    console.assert(m.games===6000 && m.bell===780 && m.cherry===380 && m.ice===110, "parse ok");
-  } catch {}
-
-  renderMetrics();
-  renderBars();
-  renderExtracted();
-
-  const file = document.getElementById("file");
-  const thumb = document.getElementById("thumb");
-  const btnOcr = document.getElementById("btn-ocr");
-  const spin = document.getElementById("spin");
-  const btnParse = document.getElementById("btn-parse");
-  const text = document.getElementById("text");
-
-  file.addEventListener("change", (e)=>{
-    setError("");
-    const f = e.target.files && e.target.files[0];
-    if (!f) { thumb.style.display="none"; state.imgUrl=null; btnOcr.classList.add("disabled"); btnOcr.disabled=true; return; }
-    const url = URL.createObjectURL(f);
-    state.imgUrl = url;
-    thumb.src = url; thumb.style.display = "inline-block";
-    btnOcr.classList.remove("disabled"); btnOcr.disabled = false;
-  });
-
-  // GitHub Pages でも確実に読める相対パス
-  const TESS_BASE = new URL("./tesseract/", location.href).href;
-
-  btnOcr.addEventListener("click", async ()=>{
-    if (!state.imgUrl) return;
-    setError("");
-    btnOcr.disabled = true; spin.style.display="inline-block"; btnOcr.firstChild.textContent = "画像から解析";
-    try {
-      const { createWorker } = window.Tesseract || {};
-      if (!createWorker) throw new Error("Tesseract not loaded");
-      const worker = await createWorker({
-        workerPath: TESS_BASE + "worker.min.js",
-        corePath:   TESS_BASE + "tesseract-core.wasm.js",
-        langPath:   TESS_BASE + "lang-data",
-        logger: ()=>{},
-      });
-      await worker.loadLanguage("jpn+eng");
-      await worker.initialize("jpn+eng");
-      const { data } = await worker.recognize(state.imgUrl);
-      await worker.terminate();
-      const t = (data && data.text) || "";
-      state.ocrText = t;
-      text.value = t;
-      state.metrics = parseMetricsFromText(t);
-      renderMetrics();
-      renderBars();
-      renderExtracted();
-      if (!state.metrics.games) {
-        setError("OCR結果から主要項目を特定できませんでした。テキスト欄で貼付け→「テキストから解析」をお試しください。");
-      }
-    } catch (e) {
-      setError("OCRが使用できません。tesseract/ フォルダの配置とパスをご確認の上、テキスト貼付け→「テキストから解析」で続行できます。");
-    } finally {
-      btnOcr.disabled = false; spin.style.display="none";
-    }
-  });
-
-  btnParse.addEventListener("click", ()=>{
-    setError("");
-    state.ocrText = text.value || "";
-    state.metrics = parseMetricsFromText(state.ocrText);
-    renderMetrics();
-    renderBars();
-    renderExtracted();
-    if (!state.metrics.games) {
-      setError("総プレイ数（○○G）が見つかりませんでした。貼り付けたテキストをご確認ください。");
-    }
-  });
-
-  // tesseract.min.js を相対で読み込み試行（無くても動く）
-  (function tryLoadTesseract(){
-    const s = document.createElement("script");
-    s.src = TESS_BASE + "tesseract.min.js";
-    s.async = true;
-    s.onload = ()=>{};
-    s.onerror = ()=>{};
-    document.head.appendChild(s);
-  })();
-}
+(function tryLoadTesseract(){ const s=document.createElement("script"); s.src="/tesseract/tesseract.min.js"; s.async=true; document.head.appendChild(s); })();
 init();
 </script>
 </body>
