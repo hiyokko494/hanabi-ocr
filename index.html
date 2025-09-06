@@ -1,188 +1,205 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>特リプTV｜パチスロ設定推測（画像 / テキスト対応・機種選択版）</title>
-  <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; margin: 24px; color: #111; }
-    h1 { font-size: 20px; margin: 0 0 12px; }
-    .hint { background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
-    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; display:none; }
-    .ok { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; display:none; }
-    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
-    .btn { font-size: 13px; padding: 6px 10px; border-radius: 6px; border: 0; cursor: pointer; }
-    .btn.primary { background: #111; color: #fff; }
-    .btn.disabled { background: #d1d5db; color: #6b7280; cursor: not-allowed; }
-    img.thumb { height: 112px; border: 1px solid #e5e7eb; border-radius: 8px; }
-    .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; margin-top: 12px; }
-    .card h3 { margin: 0 0 8px; font-size: 14px; }
-    textarea { width: 100%; height: 120px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
-    @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
-    label span.key { width: 140px; color: #374151; display: inline-block; }
-    input[type="number"] { border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px; width: 100%; }
-    .perg { font-size: 11px; color: #6b7280; width: 80px; text-align: right; }
-    .bar-wrap { width: 100%; height: 16px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
-    .bar { height: 16px; transition: width 300ms ease; }
-    .rowline { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
-    .footer { margin-top: 16px; font-size: 12px; color: #6b7280; }
-    code { background: #f3f4f6; padding: 0 4px; border-radius: 4px; }
-    select#machine { min-width: 260px; max-width: 100%; white-space: nowrap; text-overflow: ellipsis; padding: 6px 8px; border-radius: 6px; border: 1px solid #e5e7eb; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>特リプTV｜パチスロ設定推測（画像 / テキスト対応・機種選択版）</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
+  h1{font-size:20px;margin:0 0 12px}
+  .hint{background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;padding:8px 10px;border-radius:8px;font-size:13px}
+  .error{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:8px 10px;border-radius:8px;font-size:13px;margin-top:8px;display:none}
+  .ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:8px 10px;border-radius:8px;font-size:13px;margin-top:8px;display:none}
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+  .btn{font-size:13px;padding:6px 10px;border-radius:6px;border:0;cursor:pointer}
+  .btn.primary{background:#111;color:#fff}
+  .btn.disabled{background:#d1d5db;color:#6b7280;cursor:not-allowed}
+  img.thumb{height:112px;border:1px solid #e5e7eb;border-radius:8px}
+  .card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-top:12px}
+  .card h3{margin:0 0 8px;font-size:14px}
+  textarea{width:100%;height:120px;border:1px solid #e5e7eb;border-radius:8px;padding:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .grid{display:grid;grid-template-columns:1fr;gap:8px}
+  @media(min-width:640px){.grid{grid-template-columns:1fr 1fr}}
+  label span.key{width:140px;color:#374151;display:inline-block}
+  input[type="number"]{border:1px solid #e5e7eb;border-radius:6px;padding:6px 8px;width:100%}
+  .perg{font-size:11px;color:#6b7280;width:80px;text-align:right}
+  .bar-wrap{width:100%;height:16px;background:#e5e7eb;border-radius:999px;overflow:hidden}
+  .bar{height:16px;transition:width 300ms ease}
+  .rowline{display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:4px}
+  .footer{margin-top:16px;font-size:12px;color:#6b7280}
+  code{background:#f3f4f6;padding:0 4px;border-radius:4px}
+  select#machine{min-width:260px;max-width:100%;white-space:nowrap;text-overflow:ellipsis;padding:6px 8px;border-radius:6px;border:1px solid #e5e7eb}
+</style>
 </head>
 <body>
-  <h1>特リプTV｜パチスロ設定推測（データ画像 / テキスト対応・機種選択版）</h1>
-  <div class="hint">
-    <strong>使い方:</strong> 先に「機種選択」。ユニメモのテキストをそのままペーストして「テキストから解析」。画像は「画像から解析」。<br>
-    ※ iPhone のコピペで「総プレイ」や「風鈴（合算）」のような表記ゆれにも対応。
+<h1>特リプTV｜パチスロ設定推測（データ画像 / テキスト対応・機種選択版）</h1>
+<div class="hint">
+  <strong>使い方:</strong> 先に「機種選択」。ユニメモのテキストをそのまま貼って「テキストから解析」。画像は「画像から解析」。<br>
+  ※ 機種ごとの呼び名（風鈴/羽/ベル、VS GAME中はずれ 等）に自動対応。
+</div>
+
+<div id="err" class="error"></div>
+<div id="ok" class="ok"></div>
+
+<div class="row">
+  <label for="machine"><strong>機種選択：</strong></label>
+  <select id="machine">
+    <option>新ハナビ</option>
+    <option>バーサス・リヴァイズ</option>
+    <option>アレックス・ブライト</option>
+  </select>
+</div>
+
+<div class="row">
+  <input id="file" type="file" accept="image/*" />
+  <img id="thumb" class="thumb" style="display:none" alt="preview"/>
+  <button id="btn-ocr" class="btn primary disabled" disabled type="button">画像から解析</button>
+</div>
+
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <h3>テキスト（手動貼り付け）</h3>
+    <button id="btn-parse" class="btn" style="background:#2563eb;color:#fff;" type="button">テキストから解析</button>
   </div>
-
-  <div id="err" class="error"></div>
-  <div id="ok" class="ok"></div>
-
-  <div class="row">
-    <label for="machine"><strong>機種選択：</strong></label>
-    <select id="machine">
-      <option>新ハナビ</option>
-      <option>バーサス・リヴァイズ</option>
-      <option>アレックス・ブライト</option>
-    </select>
-  </div>
-
-  <div class="row">
-    <input id="file" type="file" accept="image/*" />
-    <img id="thumb" class="thumb" style="display:none" alt="preview"/>
-    <button id="btn-ocr" class="btn primary disabled" disabled type="button">画像から解析</button>
-  </div>
-
-  <div class="card">
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-      <h3>テキスト（手動貼り付け）</h3>
-      <button id="btn-parse" class="btn" style="background:#2563eb; color:#fff;" type="button">テキストから解析</button>
-    </div>
-    <textarea id="text" placeholder="例)
+  <textarea id="text" placeholder="例)
 総プレイ数 6,000G
-風鈴合算 780回
-チェリー合算 380回
-氷合算 110回"></textarea>
-  </div>
+風鈴 780回 / 羽 800回 / ベル 900回
+チェリー 380回
+氷 110回
+VS GAME中 はずれ 60回"></textarea>
+</div>
 
-  <div class="card">
-    <h3>抽出メトリクス（編集可）</h3>
-    <div class="grid" id="metrics"></div>
-  </div>
+<div class="card">
+  <h3>抽出メトリクス（編集可）</h3>
+  <div class="grid" id="metrics"></div>
+</div>
 
-  <div class="card">
-    <h3>推測比較（最大=赤、最小=水色）</h3>
-    <div id="bars">必要な数値が揃うと比較グラフが表示されます。</div>
-  </div>
+<div class="card">
+  <h3>推測比較（最大=赤、最小=水色）</h3>
+  <div id="bars">必要な数値が揃うと比較グラフが表示されます。</div>
+</div>
 
-  <div class="footer">
-    ローカルOCR：<code>/tesseract/</code> に <code>worker.min.js</code>, <code>tesseract-core.wasm.js</code>, <code>lang-data/jpn.traineddata.gz</code>, <code>lang-data/eng.traineddata.gz</code> を配置。
-  </div>
+<div class="footer">
+  ローカルOCR：<code>/tesseract/</code> に <code>worker.min.js</code>, <code>tesseract-core.wasm.js</code>, <code>lang-data/jpn.traineddata.gz</code>, <code>lang-data/eng.traineddata.gz</code> を配置。
+</div>
 
 <script>
-/** 各機種の設定期待値 (/G) */
+/* ===== 期待値 (/G) ===== */
 const PRESETS = {
   "新ハナビ": {
-    keys: ["bell","cherry","ice"],
-    label: { games:"総G", bell:"風鈴合算", cherry:"チェリー合算", ice:"氷合算" },
-    parse: {
-      // 「総[ププ]レイ」「総プレイ数」「総回転数」「総G数」「ゲーム数」「回転数」など広く対応
-      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数/i],
-      // 「風鈴（合算）」にも対応（.*?合算）
-      bell:[/風鈴.*?合算/i],
-      cherry:[/チェリー.*?合算/i],
-      ice:[/氷.*?合算/i]
-    },
-    expect: {
+    keys:["bell","cherry","ice"],
+    label:{games:"総G", bell:"風鈴", cherry:"チェリー", ice:"氷"},
+    expect:{
       bell:[1/7.7,1/7.6,1/7.5,1/7.3],
       cherry:[1/16.4,1/15.3,1/16.1,1/15.6],
       ice:[1/51.2,1/51.8,1/48.2,1/49.3],
+    },
+    aliases:{
+      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数|合計回転数?/i],
+      bell:[/風鈴(?:\s*合算)?/i],
+      cherry:[/チェリー(?:\s*合算)?/i],
+      ice:[/氷(?:\s*合算)?/i],
     }
   },
   "バーサス・リヴァイズ": {
     keys:["bell","suika","cherry","vsg_hz"],
-    label:{ games:"総G", bell:"ベル合算", suika:"スイカ合算", cherry:"チェリー合算", vsg_hz:"VS GAME中はずれ" },
-    parse:{
-      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数/i],
-      bell:[/ベル.*?合算/i],
-      suika:[/スイカ.*?合算/i],
-      cherry:[/チェリー.*?合算/i],
-      // 「VS GAME 中 はずれ」「V S G A M E はずれ」などにも対応
-      vsg_hz:[/V\s*S\s*G\s*A\s*M\s*E.*?(?:はずれ|外れ)/i]
-    },
+    label:{games:"総G", bell:"ベル", suika:"スイカ", cherry:"チェリー", vsg_hz:"VS GAME中はずれ"},
     expect:{
       bell:[1/7.2,1/7.1,1/6.9,1/6.8],
       suika:[1/55.5,1/53.4,1/54.4,1/52.3],
       cherry:[1/38.2,1/38.9,1/36.7,1/37.3],
       vsg_hz:[1/10.1,1/9.4,1/8.7,1/8.1],
+    },
+    aliases:{
+      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数|合計回転数?/i],
+      bell:[/ベル(?:\s*合算)?/i],
+      suika:[/スイカ(?:\s*合算)?/i],
+      cherry:[/チェリー(?:\s*合算)?/i],
+      vsg_hz:[/(?:V\s*S\s*G\s*A\s*M\s*E|VS\s*GAME).*?(?:はずれ|外れ|ﾊｽﾞﾚ)/i],
     }
   },
   "アレックス・ブライト": {
     keys:["hane","three","cherryA","cherryB","budou"],
-    label:{ games:"総G", hane:"羽合算", three:"3枚役", cherryA:"チェリーA合算", cherryB:"チェリーB", budou:"ブドウ合算" },
-    parse:{
-      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数/i],
-      hane:[/羽.*?合算/i],
-      three:[/(?:3|３)\s*枚役/i],
-      cherryA:[/チェリーA.*?合算/i],
-      cherryB:[/チェリーB/i],
-      budou:[/ブドウ.*?合算/i],
-    },
+    label:{games:"総G", hane:"羽", three:"3枚役", cherryA:"チェリーA", cherryB:"チェリーB", budou:"ブドウ"},
     expect:{
       hane:[1/13.4,1/13.0,1/12.6,1/12.2],
       three:[1/40.5,1/38.1,1/39.2,1/38.3],
       cherryA:[1/28.3,1/28.4,1/26.6,1/26.5],
       cherryB:[1/82.6,1/82.1,1/78.8,1/76.7],
-      budou:[1/256.0,null,null,null], // 不明は null（自動で無視）
+      budou:[1/256.0,null,null,null],
+    },
+    aliases:{
+      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数|合計回転数?/i],
+      hane:[/羽(?:\s*合算)?/i],
+      three:[/(?:3|３)\s*枚役/i],
+      cherryA:[/チェリー\s*A(?:\s*合算)?/i],
+      cherryB:[/チェリー\s*B/i],
+      budou:[/ブドウ|葡萄(?:\s*合算)?/i],
     }
   }
 };
 
 const state = { machine:"新ハナビ", imgUrl:null, ocrText:"", metrics:{} };
 
-function show(msg, ok=false){
-  const e=document.getElementById(ok?"ok":"err");
-  const o=document.getElementById(ok?"err":"ok");
-  if(o){o.style.display="none"; o.textContent="";}
-  e.style.display=msg?"block":"none"; e.textContent=msg||"";
-}
-
-/** 軽い正規化（全角→半角、全角句読点、全角空白など） */
+/* ===== ユーティリティ ===== */
+function show(msg, ok=false){ const e=document.getElementById(ok?"ok":"err"), o=document.getElementById(ok?"err":"ok"); if(o){o.style.display="none";o.textContent="";} e.style.display=msg?"block":"none"; e.textContent=msg||""; }
+/* 軽い正規化：全角→半角、空白統一、余計なスペース除去 */
 function sanitize(s){
   return (s||"")
     .replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
     .replace(/[，]/g,",").replace(/[．]/g,".").replace(/[　]/g," ")
-    .replace(/\s+\/\s+/g,"/"); // 3 / 2 → 3/2 など
+    .replace(/[：:]\s*/g,":")
+    .replace(/\s+\/\s+/g,"/")
+    .replace(/[()（）]/g," ") // 括弧は無視
+    .replace(/\s{2,}/g," ").trim();
 }
-
-/** 1行から最初の整数（カンマ対応）を抽出 */
+/* 行から最初の整数（カンマ対応） */
 function pickInt(line){
-  const m = line && line.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/);
+  const m = line && line.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*(?:回|G|ｇ|g)?/i);
+  return m ? Number(m[1].replace(/,/g,"")) : undefined;
+}
+/* 別名配列で検索：一致行→同一行の数値、無ければ次行・次々行を探索 */
+function extractByAliases(text, aliasRes){
+  const lines = text.split(/\r?\n/);
+  for(let i=0;i<lines.length;i++){
+    const ln = lines[i];
+    if(aliasRes.some(re=>re.test(ln))){
+      let val = pickInt(ln);
+      if(val==null && i+1<lines.length) val = pickInt(lines[i+1]);
+      if(val==null && i+2<lines.length) val = pickInt(lines[i+2]);
+      if(val!=null) return val;
+    }
+  }
+  /* グローバル検索（別行に「羽：」と「800」だけが離れている等に弱いので最後の手段） */
+  const joined = lines.join(" ");
+  const anyName = aliasRes.map(r=>r.source.replace(/^\^|\$$/g,"")).join("|");
+  const m = new RegExp(`(?:${anyName}).{0,20}?([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\\s*(?:回|G|ｇ|g)?`,"i").exec(joined);
   return m ? Number(m[1].replace(/,/g,"")) : undefined;
 }
 
-function parseMetricsFromText(machine,text){
-  const lines = sanitize(text).split(/\r?\n/);
-  const cfg = PRESETS[machine]; const out={};
-  for(const k of ["games",...cfg.keys]){
-    const pats = cfg.parse[k]||[];
-    const line = lines.find(l => pats.some(re => re.test(l)));
-    out[k] = pickInt(line);
-  }
+/* ===== 抽出 ===== */
+function parseMetricsFromText(machine, textRaw){
+  const t = sanitize(textRaw);
+  const cfg = PRESETS[machine];
+  const out = {};
+  // まず総G
+  out.games = extractByAliases(t, cfg.aliases.games);
+  // 各小役
+  cfg.keys.forEach(k=>{
+    out[k] = extractByAliases(t, cfg.aliases[k]);
+  });
   return out;
 }
 
-function estimateAllSettings(machine,metrics){
+/* ===== 推測計算 ===== */
+function estimateAllSettings(machine, metrics){
   const cfg=PRESETS[machine];
   const g=metrics.games||0; if(!g) return [];
   const perG={}; cfg.keys.forEach(k=>{ if(metrics[k]!=null) perG[k]=(metrics[k]||0)/g; });
   const base=[1,2,5,6];
   const rows=base.map((s,i)=>{ let err=0,used=0;
     cfg.keys.forEach(k=>{
-      const ex = cfg.expect[k][i];
+      const ex = cfg.expect[k]?.[i];
       if(perG[k]==null || ex==null || isNaN(ex)) return;
       err += Math.pow(perG[k]-ex,2); used++;
     });
@@ -193,6 +210,7 @@ function estimateAllSettings(machine,metrics){
   return rows;
 }
 
+/* ===== UI ===== */
 function barColor(p,max,min){
   if(p===max) return"rgba(239,68,68,0.85)";
   if(p===min) return"rgba(147,197,253,0.85)";
@@ -200,7 +218,6 @@ function barColor(p,max,min){
   const r=Math.round(147+(59-147)*t), g=Math.round(197+(130-197)*t), b=Math.round(253+(246-253)*t);
   return`rgba(${r},${g},${b},0.9)`;
 }
-
 function renderMetrics(){
   const wrap=document.getElementById("metrics"); wrap.innerHTML="";
   const cfg=PRESETS[state.machine]; const keys=["games",...cfg.keys];
@@ -217,7 +234,6 @@ function renderMetrics(){
     wrap.appendChild(row);
   });
 }
-
 function renderBars(){
   const mount=document.getElementById("bars");
   const rows=estimateAllSettings(state.machine,state.metrics);
@@ -236,6 +252,7 @@ function renderBars(){
   });
 }
 
+/* ===== 初期化・イベント ===== */
 function setError(msg){ show(msg,false); }
 function setOk(msg){ show(msg,true); }
 
@@ -282,7 +299,7 @@ function init(){
       const t=(data&&data.text)||""; state.ocrText=t; text.value=t;
       state.metrics = parseMetricsFromText(state.machine,t);
       const hit = Object.values(state.metrics).filter(v=>v!=null).length;
-      if(hit<=1) setError("抽出0件でした。テキストに『総プレイ数』『◯◯合算』等が含まれているかご確認ください。");
+      if(hit<=1) setError("抽出0件でした。『総プレイ数/総回転数/ゲーム数』と『風鈴/羽/ベル/チェリー/氷/ブドウ/VS GAME中 はずれ』などの行が見える形で貼り付けてください。");
       else setOk(`抽出 ${hit} 件`);
       renderMetrics(); renderBars();
     }catch(e){
@@ -297,13 +314,13 @@ function init(){
     state.ocrText = text.value || "";
     state.metrics = parseMetricsFromText(state.machine, state.ocrText);
     const hit = Object.values(state.metrics).filter(v=>v!=null).length;
-    if(hit<=1){ setError("抽出0件でした。ユニメモの見出し（総プレイ数／総回転数／◯◯合算 など）を含めてペーストしてください。"); }
+    if(hit<=1){ setError("抽出0件でした。『総プレイ数/総回転数/ゲーム数』と各小役名（風鈴/羽/ベル/チェリー/氷/ブドウ/VS GAME中 はずれ）の行を含めてペーストしてください。"); }
     else { setOk(`抽出 ${hit} 件`); }
     renderMetrics(); renderBars();
   });
 }
 
-// Tesseract（任意）読み込み。失敗しても致命的ではない
+/* 任意：Tesseract ローダ（失敗してもOK） */
 (function tryLoadTesseract(){ const s=document.createElement("script"); s.src="/tesseract/tesseract.min.js"; s.async=true; document.head.appendChild(s); })();
 
 init();
