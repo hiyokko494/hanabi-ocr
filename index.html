@@ -35,7 +35,7 @@
   <h1>特リプTV｜パチスロ設定推測（データ画像 / テキスト対応・機種選択版）</h1>
   <div class="hint">
     <strong>使い方:</strong> 先に「機種選択」。ユニメモのテキストをそのままペーストして「テキストから解析」。画像は「画像から解析」。<br>
-    ※ iPhone のコピペで「総プレイ」のような分解濁点が混じっても拾えるよう強化済み。
+    ※ iPhone のコピペで「総プレイ」や「風鈴（合算）」のような表記ゆれにも対応。
   </div>
 
   <div id="err" class="error"></div>
@@ -89,10 +89,12 @@ const PRESETS = {
     keys: ["bell","cherry","ice"],
     label: { games:"総G", bell:"風鈴合算", cherry:"チェリー合算", ice:"氷合算" },
     parse: {
-      games:[/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i],
-      bell:[/風鈴\s*合算/i],
-      cherry:[/チェリー\s*合算/i],
-      ice:[/氷\s*合算/i]
+      // 「総[ププ]レイ」「総プレイ数」「総回転数」「総G数」「ゲーム数」「回転数」など広く対応
+      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数/i],
+      // 「風鈴（合算）」にも対応（.*?合算）
+      bell:[/風鈴.*?合算/i],
+      cherry:[/チェリー.*?合算/i],
+      ice:[/氷.*?合算/i]
     },
     expect: {
       bell:[1/7.7,1/7.6,1/7.5,1/7.3],
@@ -104,11 +106,12 @@ const PRESETS = {
     keys:["bell","suika","cherry","vsg_hz"],
     label:{ games:"総G", bell:"ベル合算", suika:"スイカ合算", cherry:"チェリー合算", vsg_hz:"VS GAME中はずれ" },
     parse:{
-      games:[/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i],
-      bell:[/ベル\s*合算/i],
-      suika:[/スイカ\s*合算/i],
-      cherry:[/チェリー\s*合算/i],
-      vsg_hz:[/V\s*S\s*G\s*A\s*M\s*E.*はずれ|VSGAME中はずれ/i]
+      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数/i],
+      bell:[/ベル.*?合算/i],
+      suika:[/スイカ.*?合算/i],
+      cherry:[/チェリー.*?合算/i],
+      // 「VS GAME 中 はずれ」「V S G A M E はずれ」などにも対応
+      vsg_hz:[/V\s*S\s*G\s*A\s*M\s*E.*?(?:はずれ|外れ)/i]
     },
     expect:{
       bell:[1/7.2,1/7.1,1/6.9,1/6.8],
@@ -121,12 +124,12 @@ const PRESETS = {
     keys:["hane","three","cherryA","cherryB","budou"],
     label:{ games:"総G", hane:"羽合算", three:"3枚役", cherryA:"チェリーA合算", cherryB:"チェリーB", budou:"ブドウ合算" },
     parse:{
-      games:[/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i],
-      hane:[/羽\s*合算/i],
-      three:[/(?:3|３)枚役/i],
-      cherryA:[/チェリーA\s*合算|チェリーA（?合算）?/i],
+      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数/i],
+      hane:[/羽.*?合算/i],
+      three:[/(?:3|３)\s*枚役/i],
+      cherryA:[/チェリーA.*?合算/i],
       cherryB:[/チェリーB/i],
-      budou:[/ブドウ\s*合算/i],
+      budou:[/ブドウ.*?合算/i],
     },
     expect:{
       hane:[1/13.4,1/13.0,1/12.6,1/12.2],
@@ -144,11 +147,10 @@ function show(msg, ok=false){
   const e=document.getElementById(ok?"ok":"err");
   const o=document.getElementById(ok?"err":"ok");
   if(o){o.style.display="none"; o.textContent="";}
-  e.style.display="block"; e.textContent=msg;
-  if(!msg){ e.style.display="none"; }
+  e.style.display=msg?"block":"none"; e.textContent=msg||"";
 }
 
-/** 全角→半角など軽い正規化 */
+/** 軽い正規化（全角→半角、全角句読点、全角空白など） */
 function sanitize(s){
   return (s||"")
     .replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
@@ -156,7 +158,7 @@ function sanitize(s){
     .replace(/\s+\/\s+/g,"/"); // 3 / 2 → 3/2 など
 }
 
-/** 1行から最初の整数（カンマ対応） */
+/** 1行から最初の整数（カンマ対応）を抽出 */
 function pickInt(line){
   const m = line && line.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/);
   return m ? Number(m[1].replace(/,/g,"")) : undefined;
@@ -280,7 +282,7 @@ function init(){
       const t=(data&&data.text)||""; state.ocrText=t; text.value=t;
       state.metrics = parseMetricsFromText(state.machine,t);
       const hit = Object.values(state.metrics).filter(v=>v!=null).length;
-      if(hit<=1) setError("抽出0件でした。テキストに『総プレイ数』『◯◯合算』が含まれているかをご確認ください。");
+      if(hit<=1) setError("抽出0件でした。テキストに『総プレイ数』『◯◯合算』等が含まれているかご確認ください。");
       else setOk(`抽出 ${hit} 件`);
       renderMetrics(); renderBars();
     }catch(e){
@@ -295,7 +297,7 @@ function init(){
     state.ocrText = text.value || "";
     state.metrics = parseMetricsFromText(state.machine, state.ocrText);
     const hit = Object.values(state.metrics).filter(v=>v!=null).length;
-    if(hit<=1){ setError("抽出0件でした。テキスト内の見出しが『総プレイ数／総ゲーム／風鈴合算／ベル合算／羽合算…』等になっているか確認してください。"); }
+    if(hit<=1){ setError("抽出0件でした。ユニメモの見出し（総プレイ数／総回転数／◯◯合算 など）を含めてペーストしてください。"); }
     else { setOk(`抽出 ${hit} 件`); }
     renderMetrics(); renderBars();
   });
