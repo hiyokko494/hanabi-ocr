@@ -17,7 +17,7 @@
   img.thumb{height:112px;border:1px solid #e5e7eb;border-radius:8px}
   .card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px;margin-top:12px}
   .card h3{margin:0 0 8px;font-size:14px}
-  textarea{width:100%;height:120px;border:1px solid #e5e7eb;border-radius:8px;padding:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  textarea{width:100%;height:160px;border:1px solid #e5e7eb;border-radius:8px;padding:8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
   .grid{display:grid;grid-template-columns:1fr;gap:8px}
   @media(min-width:640px){.grid{grid-template-columns:1fr 1fr}}
   label span.key{width:140px;color:#374151;display:inline-block}
@@ -35,7 +35,7 @@
 <h1>特リプTV｜パチスロ設定推測（データ画像 / テキスト対応・機種選択版）</h1>
 <div class="hint">
   <strong>使い方:</strong> 先に「機種選択」。ユニメモのテキストをそのまま貼って「テキストから解析」。画像は「画像から解析」。<br>
-  ※ 機種ごとの呼び名（風鈴/羽/ベル、VS GAME中はずれ 等）に自動対応。
+  ※ 見出しと数値が離れて並ぶユニメモ形式に対応（見出し→後続の「◯回 / ◯G」を自動対応）。
 </div>
 
 <div id="err" class="error"></div>
@@ -61,12 +61,7 @@
     <h3>テキスト（手動貼り付け）</h3>
     <button id="btn-parse" class="btn" style="background:#2563eb;color:#fff;" type="button">テキストから解析</button>
   </div>
-  <textarea id="text" placeholder="例)
-総プレイ数 6,000G
-風鈴 780回 / 羽 800回 / ベル 900回
-チェリー 380回
-氷 110回
-VS GAME中 はずれ 60回"></textarea>
+  <textarea id="text" placeholder="ユニメモのテキストをそのまま貼り付け"></textarea>
 </div>
 
 <div class="card">
@@ -94,11 +89,12 @@ const PRESETS = {
       cherry:[1/16.4,1/15.3,1/16.1,1/15.6],
       ice:[1/51.2,1/51.8,1/48.2,1/49.3],
     },
+    // OCR誤認識の別名も含める
     aliases:{
       games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数|合計回転数?/i],
-      bell:[/風鈴(?:\s*合算)?/i],
-      cherry:[/チェリー(?:\s*合算)?/i],
-      ice:[/氷(?:\s*合算)?/i],
+      bell:[/風鈴|風鈴A|風鈴B/i],
+      cherry:[/チェリー(?:A1|A2)?|チェリーB|ﾁｪﾘｰ/i],
+      ice:[/氷|氷A|氷B/i],
     }
   },
   "バーサス・リヴァイズ": {
@@ -111,11 +107,11 @@ const PRESETS = {
       vsg_hz:[1/10.1,1/9.4,1/8.7,1/8.1],
     },
     aliases:{
-      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数|合計回転数?/i],
-      bell:[/ベル(?:\s*合算)?/i],
-      suika:[/スイカ(?:\s*合算)?/i],
-      cherry:[/チェリー(?:\s*合算)?/i],
-      vsg_hz:[/(?:V\s*S\s*G\s*A\s*M\s*E|VS\s*GAME).*?(?:はずれ|外れ|ﾊｽﾞﾚ)/i],
+      games:[/総[ププ]レイ|総プレイ(?:数|ダ)|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数/i], // 総プレイ"ダ"も拾う
+      bell:[/ベル|ﾍﾞﾙ/i],
+      suika:[/スイカ|スイ加|ﾊﾟｲﾝ|翠瓜/i], // OCR崩れ「スイ加」対応
+      cherry:[/チェリー|チェリーム|ﾁｪﾘｰ/i], // 「チェリーム」対応
+      vsg_hz:[/(?:V\s*S\s*G\s*A\s*M\s*E|VS\s*GAME|VSGAME).*?(?:はずれ|外れ|ﾊｽﾞﾚ)/i],
     }
   },
   "アレックス・ブライト": {
@@ -129,12 +125,12 @@ const PRESETS = {
       budou:[1/256.0,null,null,null],
     },
     aliases:{
-      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数|合計回転数?/i],
-      hane:[/羽(?:\s*合算)?/i],
+      games:[/総[ププ]レイ|総プレイ数|総ゲーム数?|総回転数?|総G数?|ゲーム数|回転数/i],
+      hane:[/羽(?:合算|回数)?/i],
       three:[/(?:3|３)\s*枚役/i],
-      cherryA:[/チェリー\s*A(?:\s*合算)?/i],
-      cherryB:[/チェリー\s*B/i],
-      budou:[/ブドウ|葡萄(?:\s*合算)?/i],
+      cherryA:[/チェリーA(?:合算|回数)?|チェリーA1|チェリーA2/i],
+      cherryB:[/チェリーB(?:回数)?/i],
+      budou:[/ブドウ|葡萄(?:合算|回数)?/i],
     }
   }
 };
@@ -150,44 +146,66 @@ function sanitize(s){
     .replace(/[，]/g,",").replace(/[．]/g,".").replace(/[　]/g," ")
     .replace(/[：:]\s*/g,":")
     .replace(/\s+\/\s+/g,"/")
-    .replace(/[()（）]/g," ") // 括弧は無視
-    .replace(/\s{2,}/g," ").trim();
+    .replace(/[()（）]/g," ")
+    .replace(/\s{2,}/g," ")
+    .trim();
 }
-/* 行から最初の整数（カンマ対応） */
-function pickInt(line){
-  const m = line && line.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*(?:回|G|ｇ|g)?/i);
+/* 数値抽出：G優先／回優先／分数(1/x)は除外 */
+const RE_COUNT_G = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*G\b/i;
+const RE_COUNT_KAI = /([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\s*回\b/;
+const RE_FRACTION = /(^|[^0-9])1\s*\/\s*[0-9.]/;
+
+/* 行→数値（指定タイプ） */
+function pickCount(line, wantG=false){
+  if(!line) return undefined;
+  if(RE_FRACTION.test(line)) return undefined; // 1/◯◯ はスキップ
+  const re = wantG ? RE_COUNT_G : RE_COUNT_KAI;
+  const m = line.match(re);
   return m ? Number(m[1].replace(/,/g,"")) : undefined;
 }
-/* 別名配列で検索：一致行→同一行の数値、無ければ次行・次々行を探索 */
-function extractByAliases(text, aliasRes){
-  const lines = text.split(/\r?\n/);
+
+/* 別名から見出し行を見つけ、その後方にある count 行（◯回 or ◯G）を最大 N 行まで探索して取得 */
+function findValueByHeader(lines, aliasRes, maxLookahead, wantG=false){
   for(let i=0;i<lines.length;i++){
     const ln = lines[i];
     if(aliasRes.some(re=>re.test(ln))){
-      let val = pickInt(ln);
-      if(val==null && i+1<lines.length) val = pickInt(lines[i+1]);
-      if(val==null && i+2<lines.length) val = pickInt(lines[i+2]);
-      if(val!=null) return val;
+      // 後ろ方向に広く探索（同じ行で拾えないケースに対応）
+      for(let j=i; j<Math.min(lines.length, i+maxLookahead); j++){
+        const v = pickCount(lines[j], wantG);
+        if(v!=null) return v;
+      }
     }
   }
-  /* グローバル検索（別行に「羽：」と「800」だけが離れている等に弱いので最後の手段） */
-  const joined = lines.join(" ");
-  const anyName = aliasRes.map(r=>r.source.replace(/^\^|\$$/g,"")).join("|");
-  const m = new RegExp(`(?:${anyName}).{0,20}?([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\\s*(?:回|G|ｇ|g)?`,"i").exec(joined);
+  return undefined;
+}
+
+/* 最後の手段：1つのテキスト塊から名前→近接数値（20文字以内）を抜く */
+function fallbackNearBy(text, aliasRes, wantG=false){
+  const any = aliasRes.map(r=>r.source.replace(/^\^|\$$/g,"")).join("|");
+  const m = new RegExp(`(?:${any}).{0,40}?([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\\s*${wantG?"G":"回"}`,"i").exec(text);
   return m ? Number(m[1].replace(/,/g,"")) : undefined;
 }
 
 /* ===== 抽出 ===== */
 function parseMetricsFromText(machine, textRaw){
   const t = sanitize(textRaw);
+  const lines = t.split(/\r?\n/);
   const cfg = PRESETS[machine];
   const out = {};
-  // まず総G
-  out.games = extractByAliases(t, cfg.aliases.games);
-  // 各小役
+
+  // 総G：見出し→後続から「◯G」を優先して取得（80行先まで）
+  out.games = findValueByHeader(lines, cfg.aliases.games, 80, true);
+  if(out.games==null){
+    out.games = fallbackNearBy(t, cfg.aliases.games, true);
+  }
+
+  // 各小役：見出し→後続から「◯回」を優先（80行先まで）
   cfg.keys.forEach(k=>{
-    out[k] = extractByAliases(t, cfg.aliases[k]);
+    let v = findValueByHeader(lines, cfg.aliases[k], 80, false);
+    if(v==null) v = fallbackNearBy(t, cfg.aliases[k], false);
+    out[k] = v;
   });
+
   return out;
 }
 
@@ -299,7 +317,7 @@ function init(){
       const t=(data&&data.text)||""; state.ocrText=t; text.value=t;
       state.metrics = parseMetricsFromText(state.machine,t);
       const hit = Object.values(state.metrics).filter(v=>v!=null).length;
-      if(hit<=1) setError("抽出0件でした。『総プレイ数/総回転数/ゲーム数』と『風鈴/羽/ベル/チェリー/氷/ブドウ/VS GAME中 はずれ』などの行が見える形で貼り付けてください。");
+      if(hit<=1) setError("抽出0件でした。『総プレイ数/総回転数/ゲーム数』と各小役名（風鈴/羽/ベル/チェリー/氷/ブドウ/VS GAME はずれ）を含めて貼ってください。");
       else setOk(`抽出 ${hit} 件`);
       renderMetrics(); renderBars();
     }catch(e){
@@ -314,7 +332,7 @@ function init(){
     state.ocrText = text.value || "";
     state.metrics = parseMetricsFromText(state.machine, state.ocrText);
     const hit = Object.values(state.metrics).filter(v=>v!=null).length;
-    if(hit<=1){ setError("抽出0件でした。『総プレイ数/総回転数/ゲーム数』と各小役名（風鈴/羽/ベル/チェリー/氷/ブドウ/VS GAME中 はずれ）の行を含めてペーストしてください。"); }
+    if(hit<=1){ setError("抽出0件でした。ユニメモの『項目見出し』と、その後に並ぶ数値の塊を丸ごと貼ってください。"); }
     else { setOk(`抽出 ${hit} 件`); }
     renderMetrics(); renderBars();
   });
