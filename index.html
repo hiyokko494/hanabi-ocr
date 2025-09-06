@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>特リプTV｜パチスロ設定推測（画像 / テキスト対応・機種選択版）</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif;
-           margin: 24px; color: #111; }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; margin: 24px; color: #111; }
     h1 { font-size: 20px; margin: 0 0 12px; }
     .hint { background: #fff7ed; border: 1px solid #fed7aa; color: #7c2d12; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
-    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; }
+    .error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; display:none; }
+    .ok { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 8px; display:none; }
     .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
     .btn { font-size: 13px; padding: 6px 10px; border-radius: 6px; border: 0; cursor: pointer; }
     .btn.primary { background: #111; color: #fff; }
@@ -34,10 +34,12 @@
 <body>
   <h1>特リプTV｜パチスロ設定推測（データ画像 / テキスト対応・機種選択版）</h1>
   <div class="hint">
-    <strong>使い方:</strong> 先に「機種選択」をしてください。ユニメモの「画像にする」→保存した画像をアップロードし「画像から解析」または、画面のテキストをコピーして貼り付け「テキストから解析」で利用できます。
+    <strong>使い方:</strong> 先に「機種選択」。ユニメモのテキストをそのままペーストして「テキストから解析」。画像は「画像から解析」。<br>
+    ※ iPhone のコピペで「総プレイ」のような分解濁点が混じっても拾えるよう強化済み。
   </div>
 
-  <div id="err" class="error" style="display:none"></div>
+  <div id="err" class="error"></div>
+  <div id="ok" class="ok"></div>
 
   <div class="row">
     <label for="machine"><strong>機種選択：</strong></label>
@@ -51,13 +53,13 @@
   <div class="row">
     <input id="file" type="file" accept="image/*" />
     <img id="thumb" class="thumb" style="display:none" alt="preview"/>
-    <button id="btn-ocr" class="btn primary disabled" disabled>画像から解析</button>
+    <button id="btn-ocr" class="btn primary disabled" disabled type="button">画像から解析</button>
   </div>
 
   <div class="card">
     <div style="display:flex; align-items:center; justify-content:space-between;">
       <h3>テキスト（手動貼り付け）</h3>
-      <button id="btn-parse" class="btn" style="background:#2563eb; color:#fff;">テキストから解析</button>
+      <button id="btn-parse" class="btn" style="background:#2563eb; color:#fff;" type="button">テキストから解析</button>
     </div>
     <textarea id="text" placeholder="例)
 総プレイ数 6,000G
@@ -87,10 +89,10 @@ const PRESETS = {
     keys: ["bell","cherry","ice"],
     label: { games:"総G", bell:"風鈴合算", cherry:"チェリー合算", ice:"氷合算" },
     parse: {
-      games:[/総プレイ数|総ゲーム|ゲーム数|回転数/i],
-      bell:[/風鈴合算/i],
-      cherry:[/チェリー合算/i],
-      ice:[/氷合算/i]
+      games:[/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i],
+      bell:[/風鈴\s*合算/i],
+      cherry:[/チェリー\s*合算/i],
+      ice:[/氷\s*合算/i]
     },
     expect: {
       bell:[1/7.7,1/7.6,1/7.5,1/7.3],
@@ -102,11 +104,11 @@ const PRESETS = {
     keys:["bell","suika","cherry","vsg_hz"],
     label:{ games:"総G", bell:"ベル合算", suika:"スイカ合算", cherry:"チェリー合算", vsg_hz:"VS GAME中はずれ" },
     parse:{
-      games:[/総プレイ数|総ゲーム|ゲーム数|回転数/i],
-      bell:[/ベル合算/i],
-      suika:[/スイカ合算/i],
-      cherry:[/チェリー合算/i],
-      vsg_hz:[/VS\s*GAME.*はずれ/i]
+      games:[/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i],
+      bell:[/ベル\s*合算/i],
+      suika:[/スイカ\s*合算/i],
+      cherry:[/チェリー\s*合算/i],
+      vsg_hz:[/V\s*S\s*G\s*A\s*M\s*E.*はずれ|VSGAME中はずれ/i]
     },
     expect:{
       bell:[1/7.2,1/7.1,1/6.9,1/6.8],
@@ -119,89 +121,189 @@ const PRESETS = {
     keys:["hane","three","cherryA","cherryB","budou"],
     label:{ games:"総G", hane:"羽合算", three:"3枚役", cherryA:"チェリーA合算", cherryB:"チェリーB", budou:"ブドウ合算" },
     parse:{
-      games:[/総プレイ数|総ゲーム|ゲーム数|回転数/i],
-      hane:[/羽合算/i],
-      three:[/3枚役/i],
-      cherryA:[/チェリーA合算/i],
+      games:[/総[ププ]レイ|総ゲーム|総プレイ数|ゲーム数|回転数/i],
+      hane:[/羽\s*合算/i],
+      three:[/(?:3|３)枚役/i],
+      cherryA:[/チェリーA\s*合算|チェリーA（?合算）?/i],
       cherryB:[/チェリーB/i],
-      budou:[/ブドウ合算/i],
+      budou:[/ブドウ\s*合算/i],
     },
     expect:{
       hane:[1/13.4,1/13.0,1/12.6,1/12.2],
       three:[1/40.5,1/38.1,1/39.2,1/38.3],
       cherryA:[1/28.3,1/28.4,1/26.6,1/26.5],
       cherryB:[1/82.6,1/82.1,1/78.8,1/76.7],
-      budou:[1/256.0,null,null,null], // 不明は null
+      budou:[1/256.0,null,null,null], // 不明は null（自動で無視）
     }
   }
 };
 
 const state = { machine:"新ハナビ", imgUrl:null, ocrText:"", metrics:{} };
 
-function sanitize(s){
-  return s.replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
-          .replace(/[，]/g,",").replace(/[．]/g,".").replace(/[　]/g," ");
+function show(msg, ok=false){
+  const e=document.getElementById(ok?"ok":"err");
+  const o=document.getElementById(ok?"err":"ok");
+  if(o){o.style.display="none"; o.textContent="";}
+  e.style.display="block"; e.textContent=msg;
+  if(!msg){ e.style.display="none"; }
 }
 
-function pickInt(line){ const m=line?.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/); return m?Number(m[1].replace(/,/g,"")):undefined; }
+/** 全角→半角など軽い正規化 */
+function sanitize(s){
+  return (s||"")
+    .replace(/[０-９]/g,d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
+    .replace(/[，]/g,",").replace(/[．]/g,".").replace(/[　]/g," ")
+    .replace(/\s+\/\s+/g,"/"); // 3 / 2 → 3/2 など
+}
+
+/** 1行から最初の整数（カンマ対応） */
+function pickInt(line){
+  const m = line && line.match(/([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/);
+  return m ? Number(m[1].replace(/,/g,"")) : undefined;
+}
 
 function parseMetricsFromText(machine,text){
-  const lines=sanitize(text).split(/\r?\n/);
-  const cfg=PRESETS[machine]; const out={};
+  const lines = sanitize(text).split(/\r?\n/);
+  const cfg = PRESETS[machine]; const out={};
   for(const k of ["games",...cfg.keys]){
-    const pats=cfg.parse[k]||[]; const line=lines.find(l=>pats.some(re=>re.test(l))); out[k]=pickInt(line);
+    const pats = cfg.parse[k]||[];
+    const line = lines.find(l => pats.some(re => re.test(l)));
+    out[k] = pickInt(line);
   }
   return out;
 }
 
 function estimateAllSettings(machine,metrics){
-  const cfg=PRESETS[machine]; const g=metrics.games||0; if(!g)return[];
+  const cfg=PRESETS[machine];
+  const g=metrics.games||0; if(!g) return [];
   const perG={}; cfg.keys.forEach(k=>{ if(metrics[k]!=null) perG[k]=(metrics[k]||0)/g; });
   const base=[1,2,5,6];
   const rows=base.map((s,i)=>{ let err=0,used=0;
-    cfg.keys.forEach(k=>{ if(perG[k]==null||cfg.expect[k][i]==null) return; err+=Math.pow(perG[k]-cfg.expect[k][i],2); used++; });
+    cfg.keys.forEach(k=>{
+      const ex = cfg.expect[k][i];
+      if(perG[k]==null || ex==null || isNaN(ex)) return;
+      err += Math.pow(perG[k]-ex,2); used++;
+    });
     return {setting:s, score:used?1/(1+err):0, percent:0};
   });
-  const sum=rows.reduce((a,b)=>a+b.score,0)||1; rows.forEach(r=>r.percent=r.score/sum*100); return rows;
+  const sum = rows.reduce((a,b)=>a+b.score,0) || 1;
+  rows.forEach(r=>r.percent = r.score/sum*100);
+  return rows;
 }
 
 function barColor(p,max,min){
   if(p===max) return"rgba(239,68,68,0.85)";
   if(p===min) return"rgba(147,197,253,0.85)";
-  const t=(p-min)/Math.max(1,max-min); const r=147+(59-147)*t, g=197+(130-197)*t, b=253+(246-253)*t;
+  const t=(p-min)/Math.max(1,max-min);
+  const r=Math.round(147+(59-147)*t), g=Math.round(197+(130-197)*t), b=Math.round(253+(246-253)*t);
   return`rgba(${r},${g},${b},0.9)`;
 }
 
 function renderMetrics(){
-  const wrap=document.getElementById("metrics"); wrap.innerHTML=""; const cfg=PRESETS[state.machine]; const keys=["games",...cfg.keys];
+  const wrap=document.getElementById("metrics"); wrap.innerHTML="";
+  const cfg=PRESETS[state.machine]; const keys=["games",...cfg.keys];
   keys.forEach(k=>{
     const row=document.createElement("label"); row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
     const keySpan=document.createElement("span"); keySpan.className="key"; keySpan.textContent=cfg.label[k]||k; row.appendChild(keySpan);
-    const input=document.createElement("input"); input.type="number"; input.value=state.metrics[k]??""; input.oninput=e=>{state.metrics[k]=e.target.value===""?undefined:Number(e.target.value); renderBars(); renderMetrics();}; row.appendChild(input);
-    const tail=document.createElement("span"); tail.className="perg"; if(k!=="games"&&state.metrics.games){tail.textContent="/G "+(((state.metrics[k]||0)/(state.metrics.games||1)).toFixed(4));} row.appendChild(tail);
+    const input=document.createElement("input"); input.type="number"; input.inputMode="numeric";
+    input.value = state.metrics[k] ?? "";
+    input.oninput = (e)=>{ state.metrics[k] = e.target.value==="" ? undefined : Number(e.target.value); renderBars(); renderMetrics(); };
+    row.appendChild(input);
+    const tail=document.createElement("span"); tail.className="perg";
+    if(k!=="games" && state.metrics.games){ tail.textContent="/G "+(((state.metrics[k]||0)/(state.metrics.games||1)).toFixed(4)); }
+    row.appendChild(tail);
     wrap.appendChild(row);
   });
 }
 
 function renderBars(){
-  const mount=document.getElementById("bars"); const rows=estimateAllSettings(state.machine,state.metrics); if(!rows.length){mount.textContent="必要な数値が揃うと比較グラフが表示されます。";return;}
-  const perc=rows.map(r=>r.percent), max=Math.max(...perc), min=Math.min(...perc); mount.innerHTML="";
-  rows.forEach(r=>{ const head=document.createElement("div"); head.className="rowline"; head.innerHTML=`<span>${state.machine}｜設定${r.setting}</span><span>${r.percent.toFixed(2)}%</span>`;
-    const barWrap=document.createElement("div"); barWrap.className="bar-wrap"; const bar=document.createElement("div"); bar.className="bar"; bar.style.width=Math.max(0,Math.min(100,r.percent))+"%"; bar.style.background=barColor(r.percent,max,min); barWrap.appendChild(bar);
-    mount.appendChild(head); mount.appendChild(barWrap); });
+  const mount=document.getElementById("bars");
+  const rows=estimateAllSettings(state.machine,state.metrics);
+  if(!rows.length){ mount.textContent="必要な数値が揃うと比較グラフが表示されます。"; return; }
+  const perc=rows.map(r=>r.percent), max=Math.max(...perc), min=Math.min(...perc);
+  mount.innerHTML="";
+  rows.forEach(r=>{
+    const head=document.createElement("div"); head.className="rowline";
+    head.innerHTML=`<span>${state.machine}｜設定${r.setting}</span><span>${r.percent.toFixed(2)}%</span>`;
+    const barWrap=document.createElement("div"); barWrap.className="bar-wrap";
+    const bar=document.createElement("div"); bar.className="bar";
+    bar.style.width=Math.max(0,Math.min(100,r.percent))+"%";
+    bar.style.background=barColor(r.percent,max,min);
+    barWrap.appendChild(bar);
+    mount.appendChild(head); mount.appendChild(barWrap);
+  });
 }
 
-function setError(msg){ const box=document.getElementById("err"); if(!msg){box.style.display="none"; box.textContent=""; return;} box.style.display="block"; box.textContent=msg; }
+function setError(msg){ show(msg,false); }
+function setOk(msg){ show(msg,true); }
 
 function init(){
-  state.machine=document.getElementById("machine").value; state.metrics={}; renderMetrics(); renderBars();
-  document.getElementById("machine").addEventListener("change",()=>{state.machine=document.getElementById("machine").value; state.metrics={}; renderMetrics(); renderBars();});
-  const file=document.getElementById("file"), thumb=document.getElementById("thumb"), btnOcr=document.getElementById("btn-ocr"), btnParse=document.getElementById("btn-parse"), text=document.getElementById("text");
-  file.addEventListener("change",e=>{setError(""); const f=e.target.files&&e.target.files[0]; if(!f){thumb.style.display="none"; state.imgUrl=null; btnOcr.classList.add("disabled"); btnOcr.disabled=true; return;} const url=URL.createObjectURL(f); state.imgUrl=url; thumb.src=url; thumb.style.display="inline-block"; btnOcr.classList.remove("disabled"); btnOcr.disabled=false;});
-  btnOcr.addEventListener("click",async()=>{ if(!state.imgUrl)return; setError(""); btnOcr.textContent="OCR解析中..."; btnOcr.disabled=true; try{ const {createWorker}=window.Tesseract||{}; if(!createWorker)throw new Error("Tesseract not loaded"); const worker=await createWorker({workerPath:"/tesseract/worker.min.js",corePath:"/tesseract/tesseract-core.wasm.js",langPath:"/tesseract/lang-data",logger:()=>{}}); await worker.loadLanguage("jpn+eng"); await worker.initialize("jpn+eng"); const {data}=await worker.recognize(state.imgUrl); await worker.terminate(); const t=(data&&data.text)||""; state.ocrText=t; text.value=t; state.metrics=parseMetricsFromText(state.machine,t); renderMetrics(); renderBars(); }catch(e){ setError("OCRが使用できません。/tesseract/ に必要ファイルを配置するか、テキストから解析を使用してください。"); }finally{ btnOcr.textContent="画像から解析"; btnOcr.disabled=false; }});
-  btnParse.addEventListener("click",()=>{ setError(""); state.ocrText=text.value||""; state.metrics=parseMetricsFromText(state.machine,state.ocrText); renderMetrics(); renderBars();});
+  state.machine=document.getElementById("machine").value;
+  state.metrics={};
+  renderMetrics(); renderBars();
+
+  document.getElementById("machine").addEventListener("change",()=>{
+    state.machine=document.getElementById("machine").value;
+    state.metrics={}; setOk(""); setError("");
+    renderMetrics(); renderBars();
+  });
+
+  const file=document.getElementById("file");
+  const thumb=document.getElementById("thumb");
+  const btnOcr=document.getElementById("btn-ocr");
+  const btnParse=document.getElementById("btn-parse");
+  const text=document.getElementById("text");
+
+  file.addEventListener("change",(e)=>{
+    setError(""); setOk("");
+    const f=e.target.files && e.target.files[0];
+    if(!f){ thumb.style.display="none"; state.imgUrl=null; btnOcr.classList.add("disabled"); btnOcr.disabled=true; return; }
+    const url=URL.createObjectURL(f);
+    state.imgUrl=url; thumb.src=url; thumb.style.display="inline-block";
+    btnOcr.classList.remove("disabled"); btnOcr.disabled=false;
+  });
+
+  btnOcr.addEventListener("click", async ()=>{
+    if(!state.imgUrl) return;
+    setError(""); setOk("OCR解析中…");
+    btnOcr.textContent="OCR解析中…"; btnOcr.disabled=true;
+    try{
+      const { createWorker } = window.Tesseract || {};
+      if(!createWorker) throw new Error("Tesseract not loaded");
+      const worker = await createWorker({
+        workerPath: "/tesseract/worker.min.js",
+        corePath: "/tesseract/tesseract-core.wasm.js",
+        langPath: "/tesseract/lang-data", logger:()=>{}
+      });
+      await worker.loadLanguage("jpn+eng"); await worker.initialize("jpn+eng");
+      const { data } = await worker.recognize(state.imgUrl); await worker.terminate();
+      const t=(data&&data.text)||""; state.ocrText=t; text.value=t;
+      state.metrics = parseMetricsFromText(state.machine,t);
+      const hit = Object.values(state.metrics).filter(v=>v!=null).length;
+      if(hit<=1) setError("抽出0件でした。テキストに『総プレイ数』『◯◯合算』が含まれているかをご確認ください。");
+      else setOk(`抽出 ${hit} 件`);
+      renderMetrics(); renderBars();
+    }catch(e){
+      setError("OCRが使用できません。/tesseract/ を配置するか、テキスト貼付→『テキストから解析』をご利用ください。");
+    }finally{
+      btnOcr.textContent="画像から解析"; btnOcr.disabled=false;
+    }
+  });
+
+  btnParse.addEventListener("click", ()=>{
+    setError(""); setOk("");
+    state.ocrText = text.value || "";
+    state.metrics = parseMetricsFromText(state.machine, state.ocrText);
+    const hit = Object.values(state.metrics).filter(v=>v!=null).length;
+    if(hit<=1){ setError("抽出0件でした。テキスト内の見出しが『総プレイ数／総ゲーム／風鈴合算／ベル合算／羽合算…』等になっているか確認してください。"); }
+    else { setOk(`抽出 ${hit} 件`); }
+    renderMetrics(); renderBars();
+  });
 }
+
+// Tesseract（任意）読み込み。失敗しても致命的ではない
 (function tryLoadTesseract(){ const s=document.createElement("script"); s.src="/tesseract/tesseract.min.js"; s.async=true; document.head.appendChild(s); })();
+
 init();
 </script>
 </body>
