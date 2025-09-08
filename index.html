@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜新ハナビ 専用（安定抽出・修正）</title>
+<title>2025.09.08現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</title>
 <style>
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
   h1{font-size:20px;margin:0 0 12px}
@@ -59,25 +59,49 @@
 </div>
 
 <script>
-/* === 期待値 (/G) — 新ハナビ === */
+/* === 期待値 (/G) — 新ハナビ（通常時 合算） === */
 const EXPECT = {
-  bell:  [1/7.7,  1/7.6,  1/7.5,  1/7.3],
+  bell:  [1/7.7,  1/7.6,  1/7.5,  1/7.3],   // 設定1,2,5,6の順
   cherry:[1/16.4, 1/15.3, 1/16.1, 1/15.6],
   ice:   [1/51.2, 1/51.8, 1/48.2, 1/49.3],
 };
-// 期待「分母」範囲（誤紐づけ防止フィルタ）
-const DENOM_RANGE = {
-  bell:  [4.5, 10.5],  // 1/7.x 近辺
-  cherry:[10,  25],    // 1/15.x 近辺
-  ice:   [35,  80],    // 1/50〜60 近辺
+/* === 期待“分母”の目安（ラベル→分母） ===
+   BB: 斜めBは偶数優遇（分母が小さい=出やすい=偶数寄り）
+   バラケ目は設定6のみ激増（~655）
+   RT: はずれ分母は設定が上がるほど小さくなる（出やすい）*/
+const EXPECT_DENOM = {
+  bb_slant: { // 風斜め揃い（=風鈴B）
+    1: 11.0, 2: 9.0, 5: 11.0, 6: 9.0
+  },
+  bb_rare: {  // レア役（=バラケ目10枚役）
+    1: 16384, 2: 16384, 5: 16384, 6: 655.4
+  },
+  rt_hc_miss: { // 花火チャレンジ中はずれ
+    1: 6.0, 2: 5.8, 5: 5.3, 6: 5.1
+  },
+  rt_hg_miss: { // 花火GAME中はずれ
+    1: 13.4, 2: 12.4, 5: 10.1, 6: 9.5
+  }
+};
+
+const WEIGHTS = {
+  bell: 1.0,
+  cherry: 1.0,
+  ice: 0.7,
+  bb_slant: 1.1,
+  bb_rare: 2.2,     // 6示唆が強い
+  rt_hc_miss: 1.0,
+  rt_hg_miss: 1.0,
+  rb_miss: 1.6      // 5,6のみ出る（出現で1,2に強いペナルティ）
 };
 
 const state = {
   metrics:{games:undefined,bell:undefined,cherry:undefined,ice:undefined},
+  extra:{bb_slant_den:null, bb_rare_den:null, rt_hc_den:null, rt_hg_den:null, rb_miss_count:null},
   log:[]
 };
 
-/* ========== UTILS ========== */
+/* ---------- Utils ---------- */
 function toNum(x){
   if(x==null) return undefined;
   const n = Number(String(x).replace(/,/g,''));
@@ -95,66 +119,90 @@ function sanitize(s){
     .replace(/\s{2,}/g, " ")
     .trim();
 }
-
+/* パターン */
 const RE_G_ONLY   = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
 const RE_KAI_ONLY = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*回\s*$/;
-// 1/7.4 の「1」の誤読(I/ｌ/l)も許容
 const RE_FRAC_ANY = /[1Iｌl]\s*\/\s*([0-9]+(?:\.[0-9]+)?)/;
 
-/* 同一行の「◯回 1/◯」 */
-function findCountAndFracInLine(line){
-  const c = line.match(/([0-9]{1,3}(?:,[0-9]{3})*)\s*回/);
+/* 行→ {count,denom} 取得 */
+function countFrac(line){
+  const c = line.match(RE_KAI_ONLY);
   const f = line.match(RE_FRAC_ANY);
-  const count = c ? toNum(c[1]) : undefined;
-  const denom = f ? parseFloat(f[1]) : undefined;
-  return (count!=null || denom!=null) ? {count,denom} : null;
+  return { count: c?toNum(c[1]):undefined, denom: f?parseFloat(f[1]):undefined };
 }
 
-/* 文書全体から「回＋1/◯」ペア候補を収集（行内 or 行+次行） */
-function collectAllPairs(lines){
-  const pairs = [];
-  for(let i=0;i<lines.length;i++){
-    const both = findCountAndFracInLine(lines[i]);
-    if(both && both.count!=null && both.denom!=null){
-      pairs.push({idx:i, count:both.count, denom:both.denom, kind:"inline"});
-      continue;
-    }
-    const c = RE_KAI_ONLY.exec(lines[i]);
-    if(c && i+1<lines.length){
-      const f = lines[i+1].match(RE_FRAC_ANY);
-      if(f){
-        pairs.push({idx:i, count:toNum(c[1]), denom:parseFloat(f[1]), kind:"nextline"});
+/* 1) “見出しゾーン→値ゾーン”の順次対応（ユニメモの典型） */
+function tryZippedMapping(lines){
+  // 数行に渡る“見出し”のあとに、数値ブロックが続く場合に対応
+  const labelStopIdx = (()=> {
+    for(let i=0;i<lines.length;i++){
+      // 数値っぽい行が現れたら見出しゾーン終わり
+      if(RE_G_ONLY.test(lines[i]) || RE_KAI_ONLY.test(lines[i]) || RE_FRAC_ANY.test(lines[i])) {
+        return i;
       }
     }
-  }
-  return pairs;
-}
+    return -1;
+  })();
+  if(labelStopIdx<0 || labelStopIdx<6) return null; // 見出しが十分に並んでない
 
-/* 期待値に“最も近い分母”のペアを採用（範囲外は除外） */
-function pickPairForMetric(pairs, metric, games){
-  const [lo,hi] = DENOM_RANGE[metric];
-  const expects = EXPECT[metric].map(v=>1/v); // 分母期待値配列
-  let best=null, bestScore=Infinity;
-
-  for(const p of pairs){
-    if(!(p && Number.isFinite(p.denom))) continue;
-    if(p.denom<lo || p.denom>hi) continue; // 範囲外は別役と判断
-    // 期待分母との差の最小値で評価
-    const d = Math.min(...expects.map(ex=>Math.abs(ex - p.denom)));
-    if(d<bestScore){
-      bestScore = d;
-      best = p;
+  const labels = lines.slice(0,labelStopIdx).map(s=>s.trim()).filter(Boolean);
+  const nums   = [];
+  for(let i=labelStopIdx;i<lines.length;i++){
+    const {count,denom} = countFrac(lines[i]);
+    // 少なくとも count, denom のどちらかがあれば “値” とみなす
+    if(count!=null || denom!=null){
+      // 次行が足側（1/◯）なら合体
+      if(denom==null && i+1<lines.length){
+        const f = lines[i+1].match(RE_FRAC_ANY);
+        if(f){ nums.push({count, denom:parseFloat(f[1])}); i++; continue; }
+      }
+      nums.push({count, denom});
     }
   }
-  if(best){
-    pushLog(`${metric}: 期待分母に最も近い候補を採用 → ${best.count}回（1/${best.denom}）`);
-    return best.count;
-  }
+  if(nums.length===0) return null;
 
-  // 分母無しで回数だけの候補が大量にあると紐付け誤りの温床になるので、基本は不採用
-  // ただし行内に metric 名があって回数が拾えている等が将来あれば、ここで拾う余地を残す
-  pushLog(`${metric}: 適切な候補が見つからず（分母範囲外／欠落）`);
-  return undefined;
+  // ラベル数と値数の差が大きすぎると崩れ
+  if(Math.abs(labels.length - nums.length) > 10) return null;
+
+  // ラベル→値 の辞書化（長さが合わない場合は短い方に合わせる）
+  const n = Math.min(labels.length, nums.length);
+  const map = {};
+  for(let i=0;i<n;i++){
+    map[labels[i]] = nums[i];
+  }
+  return map;
+}
+
+/* 2) ラベル検索（フォールバック） */
+function findByLabel(mapOrLines, labelRegex){
+  if(mapOrLines && !Array.isArray(mapOrLines)){
+    // zipped map
+    for(const k of Object.keys(mapOrLines)){
+      if(labelRegex.test(k)) return mapOrLines[k];
+    }
+    return null;
+  }
+  // lines fallback: ラベル行→以後の回+分母
+  const lines = mapOrLines;
+  for(let i=0;i<lines.length;i++){
+    if(!labelRegex.test(lines[i])) continue;
+    const here = countFrac(lines[i]);
+    if(here.count!=null || here.denom!=null){
+      // 行内で取れた
+      if(here.denom==null && i+1<lines.length){
+        const f = lines[i+1].match(RE_FRAC_ANY);
+        if(f) return {count:here.count, denom:parseFloat(f[1])};
+      }
+      return here;
+    }
+    // 次行以降で拾う
+    if(i+1<lines.length){
+      const c = lines[i+1].match(RE_KAI_ONLY);
+      const f = i+2<lines.length ? lines[i+2].match(RE_FRAC_ANY) : null;
+      if(c && f) return {count:toNum(c[1]), denom:parseFloat(f[1])};
+    }
+  }
+  return null;
 }
 
 function parseMetricsFromText(raw){
@@ -163,31 +211,42 @@ function parseMetricsFromText(raw){
   const lines = t.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
 
   const out = {games:undefined,bell:undefined,cherry:undefined,ice:undefined};
+  const extra = {bb_slant_den:null, bb_rare_den:null, rt_hc_den:null, rt_hg_den:null, rb_miss_count:null};
 
-  // 総G：見出しが崩れても G-only 最大を優先
-  const inlineGIdx = lines.findIndex(l=>/(総[ププ]レイ|総プレイ数|総ゲーム|総回転|総G数|ゲーム数|回転数)\s*[:：]?/i.test(l));
-  if(inlineGIdx>=0){
-    const mg = lines[inlineGIdx].match(/([0-9]{1,3}(?:,[0-9]{3})*)\s*G(?![a-zA-Z])/i);
-    if(mg){ out.games = toNum(mg[1]); pushLog(`総G: 行内から ${out.games}`); }
-  }
-  if(!out.games){
-    const cands = lines.map(ln=>{ const m=RE_G_ONLY.exec(ln); return m?toNum(m[1]):null; }).filter(v=>v!=null);
-    if(cands.length){ out.games = Math.max(...cands); pushLog(`総G: G-only最大を採用 → ${out.games}`); }
-  }
+  // 総G：G-only最大を優先
+  const cands = lines.map(ln=>{ const m=RE_G_ONLY.exec(ln); return m?toNum(m[1]):null; }).filter(v=>v!=null);
+  if(cands.length){ out.games = Math.max(...cands); pushLog(`総G: G-only最大 → ${out.games}`); }
 
-  // 文書全体ペア収集 → 期待分母でフィルタ＆最短距離
-  const pairs = collectAllPairs(lines);
+  // まずは“見出し↔値の順次マッピング”を試す
+  const zipped = tryZippedMapping(lines);
 
-  // 風鈴・チェリー・氷 合算を選ぶ
-  out.bell   = pickPairForMetric(pairs, "bell",   out.games);
-  out.cherry = pickPairForMetric(pairs, "cherry", out.games);
-  out.ice    = pickPairForMetric(pairs, "ice",    out.games);
+  // 通常時 合算
+  const bell   = findByLabel(zipped||lines, /風鈴\s*合算/);
+  const cherry = findByLabel(zipped||lines, /チェリー\s*合算/);
+  const ice    = findByLabel(zipped||lines, /氷\s*合算/);
 
-  // もし分母しか取れず回数未取得＆総Gがあるなら、回数推定も可（ただし今回は誤紐付け防止のため保守的に不採用）
+  if(bell && bell.count!=null)   { out.bell   = bell.count;   pushLog(`風鈴合算: ${out.bell}回（1/${bell.denom||"?"}）`); }
+  if(cherry && cherry.count!=null){ out.cherry = cherry.count; pushLog(`チェリー合算: ${out.cherry}回（1/${cherry.denom||"?"}）`); }
+  if(ice && ice.count!=null)     { out.ice    = ice.count;    pushLog(`氷合算: ${out.ice}回（1/${ice.denom||"?"}）`); }
+
+  // 追加シグナル：BB/RT/RB
+  const bbSlant = findByLabel(zipped||lines, /(風斜め揃い|斜め風鈴|風鈴B)/);
+  const bbRare  = findByLabel(zipped||lines, /(レア役|バラケ目)/);
+  const rtHC    = findByLabel(zipped||lines, /花火チャレンジ中はずれ/);
+  const rtHG    = findByLabel(zipped||lines, /花火GAME中はずれ/);
+  const rbMiss  = findByLabel(zipped||lines, /RB中.*(ハズレ|はずれ)/i) || findByLabel(zipped||lines, /ハズレ/);
+
+  if(bbSlant && bbSlant.denom!=null){ extra.bb_slant_den = bbSlant.denom; pushLog(`BB斜め風鈴: 1/${extra.bb_slant_den}`); }
+  if(bbRare  && bbRare.denom!=null) { extra.bb_rare_den  = bbRare.denom;  pushLog(`BBレア役(=バラケ目): 1/${extra.bb_rare_den}`); }
+  if(rtHC    && rtHC.denom!=null)   { extra.rt_hc_den    = rtHC.denom;    pushLog(`HCはずれ: 1/${extra.rt_hc_den}`); }
+  if(rtHG    && rtHG.denom!=null)   { extra.rt_hg_den    = rtHG.denom;    pushLog(`HGはずれ: 1/${extra.rt_hg_den}`); }
+  if(rbMiss && rbMiss.count!=null)  { extra.rb_miss_count= rbMiss.count;  pushLog(`RB中ハズレ: ${extra.rb_miss_count}回`); }
+
+  state.extra = extra;
   return out;
 }
 
-/* ========== 推測（誤差→正規化） ========== */
+/* ---------- 推測（重み付き誤差→正規化） ---------- */
 function estimateAllSettings(m){
   const g = toNum(m.games)||0; if(!g) return [];
   const perG = {};
@@ -196,21 +255,75 @@ function estimateAllSettings(m){
     if(Number.isFinite(v)) perG[k]= v/g;
   });
 
-  const rows=[1,2,5,6].map((s,i)=>{
-    let err=0, used=0;
-    if(perG.bell  !=null){ err+=Math.pow(perG.bell  - EXPECT.bell[i] ,2); used++; }
-    if(perG.cherry!=null){ err+=Math.pow(perG.cherry- EXPECT.cherry[i],2); used++; }
-    if(perG.ice   !=null){ err+=Math.pow(perG.ice   - EXPECT.ice[i]   ,2); used++; }
-    const score = used? 1/(1+err) : 0;
-    return {setting:s,score,percent:0};
+  // 通常時の誤差
+  function errNormal(i){
+    let e=0, used=0;
+    for(const key of ["bell","cherry","ice"]){
+      if(perG[key]!=null){
+        e += WEIGHTS[key]*Math.pow(perG[key]-EXPECT[key][i], 2);
+        used++;
+      }
+    }
+    return {e, used};
+  }
+
+  // “分母”系の誤差（分母は小さいほど出やすい→期待分母との差を使用）
+  function errDenom(setting, extra){
+    let e=0, used=0;
+    const s = String(setting);
+    if(state.extra.bb_slant_den){
+      const exp = EXPECT_DENOM.bb_slant[setting];
+      e += WEIGHTS.bb_slant * Math.pow((state.extra.bb_slant_den - exp)/exp, 2);
+      used++;
+    }
+    if(state.extra.bb_rare_den){
+      const exp = EXPECT_DENOM.bb_rare[setting];
+      e += WEIGHTS.bb_rare * Math.pow((state.extra.bb_rare_den - exp)/exp, 2);
+      used++;
+    }
+    if(state.extra.rt_hc_den){
+      const exp = EXPECT_DENOM.rt_hc_miss[setting];
+      e += WEIGHTS.rt_hc_miss * Math.pow((state.extra.rt_hc_den - exp)/exp, 2);
+      used++;
+    }
+    if(state.extra.rt_hg_den){
+      const exp = EXPECT_DENOM.rt_hg_miss[setting];
+      e += WEIGHTS.rt_hg_miss * Math.pow((state.extra.rt_hg_den - exp)/exp, 2);
+      used++;
+    }
+    // RB中ハズレ：1,2には原則出ない → 出現していれば1,2へ大ペナルティ
+    if(state.extra.rb_miss_count!=null){
+      const miss = state.extra.rb_miss_count;
+      if((setting===1 || setting===2) && miss>0){
+        e += WEIGHTS.rb_miss * (1 + miss); // 強制的に悪化
+        used++;
+      }
+      // 5,6なら軽くご褒美（誤差軽減）
+      if((setting===5 || setting===6) && miss>0){
+        e += WEIGHTS.rb_miss * Math.max(0, 1 - miss*0.2) * 0.01; // ほぼ0扱い
+        used++;
+      }
+    }
+    return {e, used};
+  }
+
+  const settings=[1,2,5,6];
+  const rows = settings.map((s,i)=>{
+    const a=errNormal(i);
+    const b=errDenom(s, state.extra);
+    const used = a.used + b.used;
+    const totalErr = a.e + b.e;
+    // usedが0ならスコア0 → 横並び回避のため minε を入れない
+    const score = used? 1/(1+totalErr) : 0;
+    return {setting:s, score, percent:0};
   });
 
-  const sum = rows.reduce((a,b)=>a+b.score,0);
+  const sum = rows.reduce((x,r)=>x+r.score,0);
   if(sum<=0) return rows.map(r=>({...r,percent:0}));
   return rows.map(r=>({...r,percent:r.score/sum*100}));
 }
 
-/* ========== UI ========== */
+/* ---------- UI（既存） ---------- */
 function barColor(p,max,min){
   if(max===min) return "rgba(96,165,250,0.85)";
   if(p===max) return "rgba(239,68,68,0.85)";
@@ -244,7 +357,7 @@ function renderMetrics(){
   });
 
   const ul = document.getElementById("log"); ul.innerHTML = "";
-  state.log.slice(-14).forEach(msg=>{
+  state.log.slice(-16).forEach(msg=>{
     const li=document.createElement("li"); li.textContent=msg; ul.appendChild(li);
   });
 }
@@ -268,13 +381,14 @@ function renderBars(){
 }
 function setError(msg){ const e=document.getElementById("err"); e.style.display=msg?"block":"none"; e.textContent=msg||""; }
 
-/* ========== init ========== */
+/* ---------- init ---------- */
 function init(){
   renderMetrics(); renderBars();
   document.getElementById("btn-parse").addEventListener("click", ()=>{
     setError("");
     const text=document.getElementById("text").value||"";
-    state.metrics = parseMetricsFromText(text);
+    const m = parseMetricsFromText(text);
+    state.metrics = m;
 
     if(!toNum(state.metrics.games)){
       setError("総G（例: 6,056G）が見つかりませんでした。");
@@ -285,14 +399,22 @@ function init(){
     renderMetrics(); renderBars();
   });
 
-  // 自己テスト（あなたの提供テキスト断片で検証）
+  // 簡易テスト（あなたのサンプル構成に準拠）
   try{
-    const sample = `
-新ハナビ
+    const sample = `新ハナビ
+遊技履歴全199件
+基本情報
 総プレイ数
+小役
 風鈴合算
 氷合算
 チェリー合算
+BB中詳細
+風斜め揃い
+レア役
+RT降組
+花火チャレンジ中はずれ
+花火GAME中はずれ
 6,056G
 813回
 1/7.4
@@ -300,9 +422,16 @@ function init(){
 1/58.8
 381回
 1/15.9
-`;
+103回
+1/9.8
+1回
+1/655.4
+83回
+1/6.1
+42回
+1/13.0`;
     const m=parseMetricsFromText(sample);
-    console.assert(m.games===6056 && m.bell===813 && m.ice===103 && m.cherry===381, "parse ok");
+    console.assert(m.games===6056 && m.bell===813 && m.ice===103 && m.cherry===381, "parse 合算OK");
   }catch(_){}
 }
 init();
