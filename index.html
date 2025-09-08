@@ -65,80 +65,96 @@ const EXPECT = {
   cherry:[1/16.4, 1/15.3, 1/16.1, 1/15.6],
   ice:   [1/51.2, 1/51.8, 1/48.2, 1/49.3],
 };
+// 期待「分母」範囲（誤紐づけ防止フィルタ）
+const DENOM_RANGE = {
+  bell:  [4.5, 10.5],  // 1/7.x 近辺
+  cherry:[10,  25],    // 1/15.x 近辺
+  ice:   [35,  80],    // 1/50〜60 近辺
+};
+
 const state = {
   metrics:{games:undefined,bell:undefined,cherry:undefined,ice:undefined},
   log:[]
 };
 
-/* ---------- ユーティリティ ---------- */
+/* ========== UTILS ========== */
 function toNum(x){
   if(x==null) return undefined;
   const n = Number(String(x).replace(/,/g,''));
   return Number.isFinite(n) ? n : undefined;
 }
 function pushLog(msg){ state.log.push(msg); }
-
 function sanitize(s){
-  // OCRゆらぎ吸収：全角→半角、スラッシュ系、コロン、空白、数字のI/ｌ→1（ただし分数コンテキストのみで扱う）
   return (s||"")
     .replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
     .replace(/[，]/g, ",").replace(/[．]/g, ".")
     .replace(/[：:]\s*/g, ": ")
     .replace(/[　]/g, " ")
     .replace(/[／]/g, "/")
-    .replace(/\s+\/\s+/g, "/")     // 1 / 7.4 → 1/7.4
+    .replace(/\s+\/\s+/g, "/")
     .replace(/\s{2,}/g, " ")
     .trim();
 }
 
 const RE_G_ONLY   = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
 const RE_KAI_ONLY = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*回\s*$/;
-// 1/7.4 の 1 が I や ｌ, l になる誤読を許容
-const RE_FRAC     = /^\s*[1Iｌl]\s*\/\s*([0-9]+(?:\.[0-9]+)?)\s*$/;
+// 1/7.4 の「1」の誤読(I/ｌ/l)も許容
+const RE_FRAC_ANY = /[1Iｌl]\s*\/\s*([0-9]+(?:\.[0-9]+)?)/;
 
-/** 同一行に「813回 1/7.4」等がある場合の抽出 */
+/* 同一行の「◯回 1/◯」 */
 function findCountAndFracInLine(line){
-  const countM = line.match(/([0-9]{1,3}(?:,[0-9]{3})*)\s*回/);
-  // 分数は「… 1/7.4」または「… I/7.4」に対応
-  const fracM = line.match(/[1Iｌl]\s*\/\s*([0-9]+(?:\.[0-9]+)?)/);
-  const count = countM ? toNum(countM[1]) : undefined;
-  const denom = fracM ? parseFloat(fracM[1]) : undefined;
-  if(count!=null || denom!=null) return {count,denom};
-  return null;
+  const c = line.match(/([0-9]{1,3}(?:,[0-9]{3})*)\s*回/);
+  const f = line.match(RE_FRAC_ANY);
+  const count = c ? toNum(c[1]) : undefined;
+  const denom = f ? parseFloat(f[1]) : undefined;
+  return (count!=null || denom!=null) ? {count,denom} : null;
 }
 
-/** 行内パース（優先） */
-function inlineCount(lines, labelRegex){
-  const idx = lines.findIndex(l=>labelRegex.test(l));
-  if(idx<0) return {count:undefined,denom:undefined,idx:-1};
-  const line = lines[idx];
-  const both = findCountAndFracInLine(line);
-  if(both) return {...both, idx};
-  // どちらか欠けている場合
-  const cOnly = RE_KAI_ONLY.exec(line);
-  const fOnly = RE_FRAC.exec(line);
-  return {
-    count: cOnly ? toNum(cOnly[1]) : undefined,
-    denom: fOnly ? parseFloat(fOnly[1]) : undefined,
-    idx
-  };
-}
-
-/** 見出し→末尾までスキャン（フォールバック：行+次行のペア） */
-function firstPairAfter(lines, startIdx){
-  for(let i=startIdx;i<lines.length;i++){
-    // 同一行に両方
+/* 文書全体から「回＋1/◯」ペア候補を収集（行内 or 行+次行） */
+function collectAllPairs(lines){
+  const pairs = [];
+  for(let i=0;i<lines.length;i++){
     const both = findCountAndFracInLine(lines[i]);
-    if(both && both.count!=null && both.denom!=null) return both;
-
-    // 行+次行でペア
-    const m1 = RE_KAI_ONLY.exec(lines[i]);
-    const m2 = (i+1<lines.length) ? RE_FRAC.exec(lines[i+1]) : null;
-    if(m1 && m2){
-      return {count:toNum(m1[1]), denom:parseFloat(m2[1])};
+    if(both && both.count!=null && both.denom!=null){
+      pairs.push({idx:i, count:both.count, denom:both.denom, kind:"inline"});
+      continue;
+    }
+    const c = RE_KAI_ONLY.exec(lines[i]);
+    if(c && i+1<lines.length){
+      const f = lines[i+1].match(RE_FRAC_ANY);
+      if(f){
+        pairs.push({idx:i, count:toNum(c[1]), denom:parseFloat(f[1]), kind:"nextline"});
+      }
     }
   }
-  return null;
+  return pairs;
+}
+
+/* 期待値に“最も近い分母”のペアを採用（範囲外は除外） */
+function pickPairForMetric(pairs, metric, games){
+  const [lo,hi] = DENOM_RANGE[metric];
+  const expects = EXPECT[metric].map(v=>1/v); // 分母期待値配列
+  let best=null, bestScore=Infinity;
+
+  for(const p of pairs){
+    if(!(p && Number.isFinite(p.denom))) continue;
+    if(p.denom<lo || p.denom>hi) continue; // 範囲外は別役と判断
+    // 期待分母との差の最小値で評価
+    const d = Math.min(...expects.map(ex=>Math.abs(ex - p.denom)));
+    if(d<bestScore){
+      bestScore = d;
+      best = p;
+    }
+  }
+  if(best){
+    pushLog(`${metric}: 期待分母に最も近い候補を採用 → ${best.count}回（1/${best.denom}）`);
+    return best.count;
+  }
+
+  // 分母無しで回数だけの候補が大量にあると紐付け誤りの温床になるので、基本は不採用
+  // ただし行内に metric 名があって回数が拾えている等が将来あれば、ここで拾う余地を残す
+  pushLog(`${metric}: 適切な候補が見つからず（分母範囲外／欠落）`);
+  return undefined;
 }
 
 function parseMetricsFromText(raw){
@@ -148,11 +164,10 @@ function parseMetricsFromText(raw){
 
   const out = {games:undefined,bell:undefined,cherry:undefined,ice:undefined};
 
-  // 総G：1) 行内 2) G-only最大
-  // 「設定推測」など余計な行が増えても、G-only最大採用で崩れにくく
-  const gInlineIdx = lines.findIndex(l=>/(総[ププ]レイ|総プレイ数|総ゲーム|総回転|総G数|ゲーム数|回転数)\s*[:：]?/i.test(l));
-  if(gInlineIdx>=0){
-    const mg = lines[gInlineIdx].match(/([0-9]{1,3}(?:,[0-9]{3})*)\s*G(?![a-zA-Z])/i);
+  // 総G：見出しが崩れても G-only 最大を優先
+  const inlineGIdx = lines.findIndex(l=>/(総[ププ]レイ|総プレイ数|総ゲーム|総回転|総G数|ゲーム数|回転数)\s*[:：]?/i.test(l));
+  if(inlineGIdx>=0){
+    const mg = lines[inlineGIdx].match(/([0-9]{1,3}(?:,[0-9]{3})*)\s*G(?![a-zA-Z])/i);
     if(mg){ out.games = toNum(mg[1]); pushLog(`総G: 行内から ${out.games}`); }
   }
   if(!out.games){
@@ -160,66 +175,19 @@ function parseMetricsFromText(raw){
     if(cands.length){ out.games = Math.max(...cands); pushLog(`総G: G-only最大を採用 → ${out.games}`); }
   }
 
-  function resolveMetric(kind, labelRe){
-    // 1) 行内優先
-    const inl = inlineCount(lines, labelRe);
-    if(inl.idx>=0){
-      let {count,denom} = inl;
-      // count欠け & denomのみ → 総Gがあれば回数を推定
-      if(count==null && denom!=null && out.games){
-        count = Math.round(out.games / denom);
-        pushLog(`${kind}: 行内の分母だけ→総Gで回数推定 ${count}（1/${denom}）`);
-      }else if(count!=null && denom!=null){
-        pushLog(`${kind}: 行内で両方取得 ${count}回（1/${denom}）`);
-      }else if(count!=null){
-        pushLog(`${kind}: 行内で回数のみ取得 ${count}回`);
-      }
-      if(count!=null) return count;
-      // 2) 見出し→末尾までスキャン（行+次行）
-      const after = firstPairAfter(lines, inl.idx);
-      if(after){
-        let c = after.count;
-        if((c==null || !Number.isFinite(c)) && after.denom!=null && out.games){
-          c = Math.round(out.games / after.denom);
-          pushLog(`${kind}: 見出し以後の分母→回数推定 ${c}（1/${after.denom}）`);
-        }else{
-          pushLog(`${kind}: 見出し以後で取得 ${c}回（1/${after.denom}）`);
-        }
-        if(Number.isFinite(c)) return c;
-      }
-    }else{
-      // 見出し行が拾えなかった場合、全体をざっくり走査
-      for(let i=0;i<lines.length;i++){
-        if(!labelRe.test(lines[i])) continue;
-        const after = firstPairAfter(lines, i);
-        if(after){
-          let c = after.count;
-          if((c==null || !Number.isFinite(c)) && after.denom!=null && out.games){
-            c = Math.round(out.games / after.denom);
-            pushLog(`${kind}: グローバル走査で分母→回数推定 ${c}（1/${after.denom}）`);
-          }else{
-            pushLog(`${kind}: グローバル走査で取得 ${c}回（1/${after.denom}）`);
-          }
-          if(Number.isFinite(c)) return c;
-        }
-      }
-    }
-    // 3) ラストチャンス：該当行内の「回」だけ
-    if(inl.count!=null){ pushLog(`${kind}: fallback 回数のみ ${inl.count}回`); return inl.count; }
-    return undefined;
-  }
+  // 文書全体ペア収集 → 期待分母でフィルタ＆最短距離
+  const pairs = collectAllPairs(lines);
 
-  // 風鈴合算
-  out.bell = resolveMetric("風鈴合算", /風鈴\s*合算/i);
-  // チェリー合算
-  out.cherry = resolveMetric("チェリー合算", /チェリー\s*合算/i);
-  // 氷合算
-  out.ice = resolveMetric("氷合算", /氷\s*合算/i);
+  // 風鈴・チェリー・氷 合算を選ぶ
+  out.bell   = pickPairForMetric(pairs, "bell",   out.games);
+  out.cherry = pickPairForMetric(pairs, "cherry", out.games);
+  out.ice    = pickPairForMetric(pairs, "ice",    out.games);
 
+  // もし分母しか取れず回数未取得＆総Gがあるなら、回数推定も可（ただし今回は誤紐付け防止のため保守的に不採用）
   return out;
 }
 
-/* ---------- 推測（二乗誤差→正規化） ---------- */
+/* ========== 推測（誤差→正規化） ========== */
 function estimateAllSettings(m){
   const g = toNum(m.games)||0; if(!g) return [];
   const perG = {};
@@ -233,31 +201,24 @@ function estimateAllSettings(m){
     if(perG.bell  !=null){ err+=Math.pow(perG.bell  - EXPECT.bell[i] ,2); used++; }
     if(perG.cherry!=null){ err+=Math.pow(perG.cherry- EXPECT.cherry[i],2); used++; }
     if(perG.ice   !=null){ err+=Math.pow(perG.ice   - EXPECT.ice[i]   ,2); used++; }
-    const score = used? 1/(1+err) : 0; // used==0なら0
+    const score = used? 1/(1+err) : 0;
     return {setting:s,score,percent:0};
   });
 
   const sum = rows.reduce((a,b)=>a+b.score,0);
-  if(sum<=0){
-    // 有効データなし → すべて0%（棒は出すが同値扱い）
-    return rows.map(r=>({...r,percent:0}));
-  }
+  if(sum<=0) return rows.map(r=>({...r,percent:0}));
   return rows.map(r=>({...r,percent:r.score/sum*100}));
 }
 
-/* ---------- UI ---------- */
+/* ========== UI ========== */
 function barColor(p,max,min){
-  if(max===min){
-    // 全て同値 → 中間色で統一
-    return "rgba(96,165,250,0.85)"; // ブルー系中間
-  }
-  if(p===max) return "rgba(239,68,68,0.85)";   // 赤
-  if(p===min) return "rgba(147,197,253,0.85)"; // 水色
+  if(max===min) return "rgba(96,165,250,0.85)";
+  if(p===max) return "rgba(239,68,68,0.85)";
+  if(p===min) return "rgba(147,197,253,0.85)";
   const t=(p-min)/Math.max(1,(max-min));
   const r=Math.round(147+(59-147)*t), g=Math.round(197+(130-197)*t), b=Math.round(253+(246-253)*t);
   return `rgba(${r},${g},${b},0.9)`;
 }
-
 function renderMetrics(){
   const wrap=document.getElementById("metrics"); wrap.innerHTML="";
   const keys=["games","bell","cherry","ice"];
@@ -270,35 +231,28 @@ function renderMetrics(){
     input.oninput=e=>{
       const v = e.target.value==="" ? undefined : toNum(e.target.value);
       state.metrics[k]=v;
-      renderBars(); renderMetrics(); // 反映更新
+      renderBars(); renderMetrics();
     };
     row.appendChild(input);
     const tail=document.createElement("span"); tail.className="perg";
     if(k!=="games" && toNum(state.metrics.games)){
       const per = (toNum(state.metrics[k])||0)/toNum(state.metrics.games);
-      if(Number.isFinite(per)) tail.textContent="/G "+ per.toFixed(4);
-      else tail.textContent="";
-    }
+      tail.textContent = Number.isFinite(per) ? "/G "+per.toFixed(4) : "";
+    }else tail.textContent="";
     row.appendChild(tail);
     wrap.appendChild(row);
   });
 
-  // 抽出ログ
-  const ul = document.getElementById("log");
-  ul.innerHTML = "";
-  state.log.slice(-12).forEach(msg=>{
+  const ul = document.getElementById("log"); ul.innerHTML = "";
+  state.log.slice(-14).forEach(msg=>{
     const li=document.createElement("li"); li.textContent=msg; ul.appendChild(li);
   });
 }
-
 function renderBars(){
   const mount=document.getElementById("bars");
   const rows=estimateAllSettings(state.metrics);
   if(!rows.length){ mount.textContent="必要な数値が揃うと比較グラフが表示されます。"; return; }
-
-  const perc=rows.map(r=>r.percent);
-  const max=Math.max(...perc), min=Math.min(...perc);
-
+  const perc=rows.map(r=>r.percent), max=Math.max(...perc), min=Math.min(...perc);
   mount.innerHTML="";
   rows.forEach(r=>{
     const head=document.createElement("div"); head.className="rowline";
@@ -312,10 +266,9 @@ function renderBars(){
     mount.appendChild(head); mount.appendChild(barWrap);
   });
 }
-
 function setError(msg){ const e=document.getElementById("err"); e.style.display=msg?"block":"none"; e.textContent=msg||""; }
 
-/* ---------- init ---------- */
+/* ========== init ========== */
 function init(){
   renderMetrics(); renderBars();
   document.getElementById("btn-parse").addEventListener("click", ()=>{
@@ -332,16 +285,22 @@ function init(){
     renderMetrics(); renderBars();
   });
 
-  // 自己テスト（あなたの提供値＋並列ノイズ行）
+  // 自己テスト（あなたの提供テキスト断片で検証）
   try{
-    const sample = [
-      "設定推測 ボタンが増えたとしても無視されるべき",
-      "総プレイ数：6,056G",
-      "風鈴合算：813回 1/7.4",
-      "氷合算：103回 1/58.8",
-      "チェリー合算：381回 1/15.9",
-      "6,056G","813回","1/7.4","103回","1/58.8","381回","1/15.9"
-    ].join("\n");
+    const sample = `
+新ハナビ
+総プレイ数
+風鈴合算
+氷合算
+チェリー合算
+6,056G
+813回
+1/7.4
+103回
+1/58.8
+381回
+1/15.9
+`;
     const m=parseMetricsFromText(sample);
     console.assert(m.games===6056 && m.bell===813 && m.ice===103 && m.cherry===381, "parse ok");
   }catch(_){}
