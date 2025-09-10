@@ -62,16 +62,22 @@
 <script>
 /* === 期待値 (/G) — 新ハナビ（通常時 合算） === */
 const EXPECT = {
-  bell:  [1/7.7,  1/7.6,  1/7.5,  1/7.3],   // 設定: 1,2,5,6 の順
+  bell:  [1/7.7,  1/7.6,  1/7.5,  1/7.3],   // 設定: 1,2,5,6
   cherry:[1/16.4, 1/15.3, 1/16.1, 1/15.6],
   ice:   [1/51.2, 1/51.8, 1/48.2, 1/49.3],
 };
+/* 期待“分母”の目安レンジ（フォールバック割当用） */
+const DENOM_RANGE = {
+  bell:  [4.5, 10.5],  // 1/7.x 付近
+  cherry:[10,  25],    // 1/15.x 付近
+  ice:   [35,  80],    // 1/50〜60 付近
+};
 /* === BB/RT/RBの“分母”期待値（小さいほど出やすい） === */
 const EXPECT_DENOM = {
-  bb_slant: {1:11.0, 2:9.0, 5:11.0, 6:9.0},        // 斜め風鈴＝偶数優遇
-  bb_rare:  {1:16384,2:16384,5:16384,6:655.4},     // バラケ目＝6激強
-  rt_hc_miss:{1:6.0,  2:5.8,  5:5.3,  6:5.1},      // HCはずれ
-  rt_hg_miss:{1:13.4, 2:12.4, 5:10.1, 6:9.5}       // HGはずれ
+  bb_slant: {1:11.0, 2:9.0, 5:11.0, 6:9.0},
+  bb_rare:  {1:16384,2:16384,5:16384,6:655.4},
+  rt_hc_miss:{1:6.0,  2:5.8,  5:5.3,  6:5.1},
+  rt_hg_miss:{1:13.4, 2:12.4, 5:10.1, 6:9.5}
 };
 const WEIGHTS = { bell:1.0, cherry:1.0, ice:0.7, bb_slant:1.1, bb_rare:2.2, rt_hc_miss:1.0, rt_hg_miss:1.0, rb_miss:1.6 };
 
@@ -102,32 +108,23 @@ function sanitize(s){
     .trim();
 }
 
-/* ===== 行連結プリプロセス =====
-   OCRで見出しが行割れするパターンを1行化する */
+/* ===== 行連結プリプロセス ===== */
 function coalesceLines(lines){
   const out=[];
   for(let i=0;i<lines.length;i++){
     let cur=lines[i];
 
-    // 1) 風鈴/チェリー/氷 + 合算
     if(/^(風鈴|チェリー|氷)\s*$/.test(cur) && i+1<lines.length && /^合算\s*$/.test(lines[i+1])){
-      out.push(RegExp.$1 + "合算");
-      i+=1; continue;
+      out.push(RegExp.$1 + "合算"); i++; continue;
     }
-    // 2) 花火チャレンジ中 + はずれ
     if(/^花火チャレンジ中\s*$/.test(cur) && i+1<lines.length && /^(?:はずれ|ハズレ)\s*$/.test(lines[i+1])){
-      out.push("花火チャレンジ中はずれ");
-      i+=1; continue;
+      out.push("花火チャレンジ中はずれ"); i++; continue;
     }
-    // 3) 花火GAME中 + はずれ
     if(/^花火GAME中\s*$/.test(cur) && i+1<lines.length && /^(?:はずれ|ハズレ)\s*$/.test(lines[i+1])){
-      out.push("花火GAME中はずれ");
-      i+=1; continue;
+      out.push("花火GAME中はずれ"); i++; continue;
     }
-    // 4) レア役（バラケ目）みたいな注釈割れ
     if(/^レア役\s*$/.test(cur) && i+1<lines.length && /[()（].*バラケ目.*[)）]\s*$/.test(lines[i+1])){
-      out.push("レア役（バラケ目）");
-      i+=1; continue;
+      out.push("レア役（バラケ目）"); i++; continue;
     }
     out.push(cur);
   }
@@ -136,7 +133,7 @@ function coalesceLines(lines){
 
 /* パターン（OCRゆらぎに寛容に） */
 const RE_G_ONLY      = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
-/* 回数の誤読: 回|囘|问|n を許容（語尾の単独 n を “回” 誤読とみなす） */
+/* 回数の誤読: 回|囘|问|n を許容 */
 const RE_KAI_LIKE    = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n)\s*$/i;
 /* 分母: カンマ入りも許容 → 取り出し後に , を除去して数値化 */
 const RE_FRAC_ANY    = /[1Iｌl]\s*\/\s*([0-9][0-9,]*(?:\.[0-9]+)?)/;
@@ -149,6 +146,46 @@ function countFrac(line){
   return { count: c?toNum(c[1]):undefined, denom };
 }
 
+/* 文書全体から「回+1/◯」ペア候補を収集（行内 or 行+次行） */
+function collectAllPairs(lines){
+  const pairs = [];
+  for(let i=0;i<lines.length;i++){
+    const {count,denom} = countFrac(lines[i]);
+    if(count!=null && denom!=null){
+      pairs.push({idx:i, count, denom, kind:"inline"});
+      continue;
+    }
+    // 行+次行ペア
+    const c = lines[i].match(RE_KAI_LIKE);
+    const f = (i+1<lines.length) ? lines[i+1].match(RE_FRAC_ANY) : null;
+    if(c && f){
+      pairs.push({idx:i, count:toNum(c[1]), denom:parseFloat(f[1].replace(/,/g,'')), kind:"nextline"});
+      i++; // 次行は消費済み
+    }
+  }
+  pushLog(`pairs: ${pairs.length}件収集`);
+  return pairs;
+}
+
+/* 期待分母に最も近いペアを採用（レンジ外は除外） */
+function fallbackByDenom(pairs, metric){
+  const [lo,hi] = DENOM_RANGE[metric];
+  const expects = EXPECT[metric].map(v=>1/v); // 期待“分母”
+  let best=null, bestScore=Infinity;
+  for(const p of pairs){
+    if(!(p && Number.isFinite(p.denom))) continue;
+    if(p.denom<lo || p.denom>hi) continue;
+    const d = Math.min(...expects.map(ex=>Math.abs(ex - p.denom)));
+    if(d<bestScore){ best=p; bestScore=d; }
+  }
+  if(best){
+    pushLog(`${metric}: fallback採用 → ${best.count}回（1/${best.denom}）`);
+    return best.count;
+  }
+  pushLog(`${metric}: fallback不発（レンジ内の分母なし）`);
+  return undefined;
+}
+
 /* 1) “見出しゾーン→値ゾーン”の順次対応（ユニメモの典型） */
 function tryZippedMapping(lines){
   const labelStopIdx = (()=> {
@@ -157,7 +194,7 @@ function tryZippedMapping(lines){
     }
     return -1;
   })();
-  if(labelStopIdx<0 || labelStopIdx<6) return null;
+  if(labelStopIdx<0) return null;
 
   const labels = lines.slice(0,labelStopIdx).map(s=>s.trim()).filter(Boolean);
   const nums   = [];
@@ -172,13 +209,12 @@ function tryZippedMapping(lines){
     }
   }
   if(nums.length===0) return null;
-  if(Math.abs(labels.length - nums.length) > 10) return null;
 
   const n = Math.min(labels.length, nums.length);
   const map = {};
   for(let i=0;i<n;i++) map[labels[i]] = nums[i];
 
-  pushLog(`zipped: labels=${n}件, nums=${nums.length}件`);
+  pushLog(`zipped: labels=${labels.length}件, nums=${nums.length}件（zip=${n}）`);
   return map;
 }
 
@@ -215,7 +251,7 @@ function parseMetricsFromText(raw){
   state.log = [];
   const t = sanitize(raw);
   const rawLines = t.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-  const lines = coalesceLines(rawLines);    // ★ 行割れを先に結合
+  const lines = coalesceLines(rawLines);
 
   const out = {games:undefined,bell:undefined,cherry:undefined,ice:undefined};
   const extra = {bb_slant_den:null, bb_rare_den:null, rt_hc_den:null, rt_hg_den:null, rb_miss_count:null};
@@ -228,17 +264,24 @@ function parseMetricsFromText(raw){
   // 見出し↔値の順次マッピング
   const zipped = tryZippedMapping(lines);
 
-  // 通常時 合算
-  const bell   = findByLabel(zipped||lines, /風鈴\s*合算/);
-  const cherry = findByLabel(zipped||lines, /チェリー\s*合算/);
-  const ice    = findByLabel(zipped||lines, /氷\s*合算/);
+  // 通常時 合算（まずはラベルで狙う）
+  const bellL   = findByLabel(zipped||lines, /風鈴\s*合算/);
+  const cherryL = findByLabel(zipped||lines, /チェリー\s*合算/);
+  const iceL    = findByLabel(zipped||lines, /氷\s*合算/);
+  if(bellL && bellL.count!=null)   { out.bell   = bellL.count;   pushLog(`風鈴合算: ${out.bell}回（1/${bellL.denom??"?"}）`); }
+  if(cherryL && cherryL.count!=null){ out.cherry = cherryL.count; pushLog(`チェリー合算: ${out.cherry}回（1/${cherryL.denom??"?"}）`); }
+  if(iceL && iceL.count!=null)     { out.ice    = iceL.count;    pushLog(`氷合算: ${out.ice}回（1/${iceL.denom??"?"}）`); }
 
-  if(bell && bell.count!=null)   { out.bell   = bell.count;   pushLog(`風鈴合算: ${out.bell}回（1/${bell.denom??"?"}）`); }
-  if(cherry && cherry.count!=null){ out.cherry = cherry.count; pushLog(`チェリー合算: ${out.cherry}回（1/${cherry.denom??"?"}）`); }
-  if(ice && ice.count!=null)     { out.ice    = ice.count;    pushLog(`氷合算: ${out.ice}回（1/${ice.denom??"?"}）`); }
+  // まだ欠けていたら → 全体ペアから期待レンジで補完
+  if(out.bell==null || out.cherry==null || out.ice==null){
+    const pairs = collectAllPairs(lines);
+    if(out.bell==null)   out.bell   = fallbackByDenom(pairs, "bell");
+    if(out.cherry==null) out.cherry = fallbackByDenom(pairs, "cherry");
+    if(out.ice==null)    out.ice    = fallbackByDenom(pairs, "ice");
+  }
 
   // 追加シグナル：BB/RT/RB
-  const bbSlant = findByLabel(zipped||lines, /(風斜め揃い|斜め風鈴|風鈴B|風鈴中段揃)/); // 中段揃いも念のため
+  const bbSlant = findByLabel(zipped||lines, /(風斜め揃い|斜め風鈴|風鈴B|風鈴中段揃)/);
   const bbRare  = findByLabel(zipped||lines, /(レア役|バラケ目)/);
   const rtHC    = findByLabel(zipped||lines, /花火チャレンジ中はずれ/);
   const rtHG    = findByLabel(zipped||lines, /花火GAME中はずれ/);
@@ -326,7 +369,6 @@ function barColor(p,max,min){
   const r=Math.round(147+(59-147)*t), g=Math.round(197+(130-197)*t), b=Math.round(253+(246-253)*t);
   return `rgba(${r},${g},${b},0.9)`;
 }
-
 function renderMetrics(){
   const wrap=document.getElementById("metrics"); wrap.innerHTML="";
   const keys=["games","bell","cherry","ice"];
@@ -356,7 +398,6 @@ function renderMetrics(){
     const li=document.createElement("li"); li.textContent=msg; ul.appendChild(li);
   });
 }
-
 function renderBars(){
   const mount=document.getElementById("bars");
   const rows=estimateAllSettings(state.metrics);
@@ -396,7 +437,7 @@ function init(){
       }catch(err){ setError("解析中にエラー: "+(err&&err.message?err.message:String(err))); }
     });
 
-    // 自己テスト（行割れ＋カンマ入り分母＋回→n誤読混合）
+    // 自己テスト（行割れ＋遠距離配置でも成立）
     const sample = `新ハナビ
 基本情報
 総プレイ数
@@ -410,27 +451,26 @@ function init(){
 BB中詳細
 風斜め揃い
 レア役
-RT
+RT降組
 花火チャレンジ中
 はずれ
 花火GAME中
 はずれ
+
+---- ここから数値ブロック（かなり離して配置） ----
 6,056G
+
 813回
 1/7.4
+
+（別データ…）
 103回
 1/58.8
+
+
 381n
 1/15.9
-103回
-1/9.8
-1回
-1/655.4
-83回
-1/6.1
-42回
-1/13.0
-1/1,014.0`;
+`;
     const m=parseMetricsFromText(sample);
     console.assert(m.games===6056 && m.bell===813 && m.ice===103 && m.cherry===381, "parse 合算OK");
   }catch(err){ setError("初期化エラー: "+(err&&err.message?err.message:String(err))); }
