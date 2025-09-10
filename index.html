@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>03-2025.09.11現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</title>
+<title>04-2025.09.11現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</title>
 <style>
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
   h1{font-size:20px;margin:0 0 12px}
@@ -24,7 +24,7 @@
 </style>
 </head>
 <body>
-<h1>03-2025.09.11現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</h1>
+<h1>04-2025.09.11現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</h1>
 <div class="hint">
   貼ったテキストを<strong>行内</strong>→<strong>見出しから末尾までの後方スキャン</strong>の順で解析します。<br>
   総Gは<b>「◯◯G」だけの行</b>を候補にし<b>最大値</b>を採用。OCRの行割れ（例：<code>チェリー⏎合算</code>）は自動結合してから解析します。
@@ -260,44 +260,94 @@ function parseMetricsFromText(raw){
   return out;
 }
 
-/* ---------- 推測（重み付き誤差→正規化） ---------- */
+/* ---------- 推測（尤度ベース：二項ログ尤度 + 追加指標のガウス罰則） ---------- */
 function estimateAllSettings(m){
   const g = toNum(m.games)||0; if(!g) return [];
-  const perG = {};
-  ["bell","cherry","ice"].forEach(k=>{ const v=toNum(m[k]); if(Number.isFinite(v)) perG[k]=v/g; });
 
-  function errNormal(i){
-    let e=0, used=0;
-    for(const key of ["bell","cherry","ice"]){
-      if(perG[key]!=null){ e += WEIGHTS[key]*Math.pow(perG[key]-EXPECT[key][i],2); used++; }
-    }
-    return {e, used};
+  // 尤度用の小さすぎる値対策
+  const EPS = 1e-9;
+  const clamp01 = (p)=> Math.min(1-EPS, Math.max(EPS, p));
+
+  // 尤度（log）を器用に合算する
+  function ll_binom(k, n, p){ // 定数項C(n,k)は比較では共通なので省略
+    p = clamp01(p);
+    const q = 1 - p;
+    return k*Math.log(p) + (n-k)*Math.log(q);
   }
-  function errDenom(setting){
-    let e=0, used=0;
-    if(state.extra.bb_slant_den){ const exp=EXPECT_DENOM.bb_slant[setting]; e += WEIGHTS.bb_slant*Math.pow((state.extra.bb_slant_den-exp)/exp,2); used++; }
-    if(state.extra.bb_rare_den){  const exp=EXPECT_DENOM.bb_rare[setting];  e += WEIGHTS.bb_rare *Math.pow((state.extra.bb_rare_den -exp)/exp,2); used++; }
-    if(state.extra.rt_hc_den){    const exp=EXPECT_DENOM.rt_hc_miss[setting];e+= WEIGHTS.rt_hc_miss*Math.pow((state.extra.rt_hc_den   -exp)/exp,2); used++; }
-    if(state.extra.rt_hg_den){    const exp=EXPECT_DENOM.rt_hg_miss[setting];e+= WEIGHTS.rt_hg_miss*Math.pow((state.extra.rt_hg_den   -exp)/exp,2); used++; }
-    if(state.extra.rb_miss_count!=null){
-      const miss=state.extra.rb_miss_count;
-      if((setting===1||setting===2)&&miss>0){ e += WEIGHTS.rb_miss*(1+miss); used++; }
-      if((setting===5||setting===6)&&miss>0){ e += WEIGHTS.rb_miss*Math.max(0,1-miss*0.2)*0.01; used++; }
-    }
-    return {e, used};
+  // 分母系（期待分母exp、観測分母d）を“ずれ”のガウス罰則にする（= log尤度にマイナス加点）
+  function penalty_denom(d, exp, weight){
+    if(!Number.isFinite(d) || !Number.isFinite(exp)) return 0;
+    const z = (d-exp)/exp;                 // 相対誤差
+    const sigma = 0.12;                    // 12% 程度の幅（必要に応じて微調整）
+    const pen = - weight * (z*z)/(2*sigma*sigma);
+    return pen;
   }
+
+  const have = {
+    bell:   Number.isFinite(toNum(m.bell)),
+    cherry: Number.isFinite(toNum(m.cherry)),
+    ice:    Number.isFinite(toNum(m.ice))
+  };
 
   const settings=[1,2,5,6];
-  const rows=settings.map((s,i)=>{
-    const a=errNormal(i), b=errDenom(s);
-    const used=a.used+b.used; const total=a.e+b.e;
-    const score=used?1/(1+total):0;
-    return {setting:s, score, percent:0};
+  const rows = settings.map((s,i)=>{
+    let ll = 0, used = 0;
+
+    // 通常時3種：二項ログ尤度
+    if(have.bell){
+      const k = toNum(m.bell);
+      const p = EXPECT.bell[i];
+      ll += WEIGHTS.bell * ll_binom(k, g, p); used++;
+    }
+    if(have.cherry){
+      const k = toNum(m.cherry);
+      const p = EXPECT.cherry[i];
+      ll += WEIGHTS.cherry * ll_binom(k, g, p); used++;
+    }
+    if(have.ice){
+      const k = toNum(m.ice);
+      const p = EXPECT.ice[i];
+      ll += WEIGHTS.ice * ll_binom(k, g, p); used++;
+    }
+
+    // 追加シグナル（分母系）：ガウス罰則（= より期待に近いほど ll が高くなる）
+    if(state.extra.bb_slant_den){
+      ll += penalty_denom(state.extra.bb_slant_den, EXPECT_DENOM.bb_slant[s], WEIGHTS.bb_slant);
+      used++;
+    }
+    if(state.extra.bb_rare_den){
+      ll += penalty_denom(state.extra.bb_rare_den,  EXPECT_DENOM.bb_rare[s],  WEIGHTS.bb_rare);
+      used++;
+    }
+    if(state.extra.rt_hc_den){
+      ll += penalty_denom(state.extra.rt_hc_den,    EXPECT_DENOM.rt_hc_miss[s], WEIGHTS.rt_hc_miss);
+      used++;
+    }
+    if(state.extra.rt_hg_den){
+      ll += penalty_denom(state.extra.rt_hg_den,    EXPECT_DENOM.rt_hg_miss[s], WEIGHTS.rt_hg_miss);
+      used++;
+    }
+    // RB中ハズレ：1,2で出たら大減点／5,6は微ご褒美（penaltyを符号で表現）
+    if(state.extra.rb_miss_count!=null){
+      const miss = state.extra.rb_miss_count;
+      if((s===1 || s===2) && miss>0){ ll -= WEIGHTS.rb_miss * (1 + miss); used++; }
+      if((s===5 || s===6) && miss>0){ ll += WEIGHTS.rb_miss * Math.min(1, miss*0.2); used++; }
+    }
+
+    // usedが全く無い安全弁
+    return {setting:s, ll: used ? ll : -Infinity};
   });
 
-  const sum=rows.reduce((x,r)=>x+r.score,0);
-  if(sum<=0) return rows.map(r=>({...r,percent:0}));
-  return rows.map(r=>({...r,percent:r.score/sum*100}));
+  // softmaxで確率化（数値安定化のため max を引く）
+  const maxLL = Math.max(...rows.map(r=>r.ll));
+  const expS  = rows.map(r=> Math.exp(r.ll - maxLL));
+  const sumS  = expS.reduce((a,b)=>a+b,0) || 1;
+
+  return rows.map((r,idx)=>({
+    setting: r.setting,
+    score:   expS[idx],
+    percent: (expS[idx]/sumS)*100
+  }));
 }
 
 /* ---------- UI ---------- */
