@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>05 2025.09.11現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</title>
+<title>06 2025.09.11現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</title>
 <style>
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
   h1{font-size:20px;margin:0 0 12px}
@@ -21,21 +21,26 @@
   .bar{height:16px;transition:width .3s ease}
   .rowline{display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:4px}
   ul.log{margin:6px 0 0 18px;padding:0;font-size:12px;line-height:1.4}
-  .opts{display:flex;gap:14px;align-items:center;font-size:13px;color:#374151;margin-top:8px}
+  .opts{display:flex;gap:14px;align-items:center;font-size:13px;color:#374151;margin-top:8px;flex-wrap:wrap}
   .muted{color:#6b7280}
   .kv{display:flex;align-items:center;gap:8px}
   .secnote{font-size:12px;color:#6b7280;margin-top:4px}
   .pill{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-size:11px}
   .two-col{display:grid;grid-template-columns:1fr;gap:10px}
-  @media(min-width:900px){.two-col{grid-template-columns:1fr 1fr}}
+  @media(min-width:1000px){.two-col{grid-template-columns:1fr 1fr}}
   .subgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th,td{border:1px solid #e5e7eb;padding:6px 8px;text-align:left;vertical-align:top}
+  th{background:#f3f4f6}
+  .tag{display:inline-block;font-size:10px;padding:2px 6px;border-radius:6px;background:#f1f5f9;color:#0f172a;margin-left:6px}
 </style>
 </head>
 <body>
-<h1>05 2025.09.11現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</h1>
+<h1>06 2025.09.11現在、機能追加中につき正常に動作しません：特リプTV｜新ハナビ 専用（安定抽出・修正）</h1>
 <div class="hint">
-  OCR崩れに強い抽出（<b>行連結</b>→<b>近傍±8行×分母レンジ</b>→全体フォールバック）＋<b>二項ログ尤度</b>で設定比較。<br>
-  REG後の<b>ピースマーク</b>ONで「設定1＝0%」にします。
+  OCR崩れに強い抽出（<b>行連結</b>→<b>近傍±20行×分母レンジ</b>→全体フォールバック）＋<b>二項ログ尤度</b>で設定比較。<br>
+  <b>ピースマーク</b>ONで「設定1＝0%」、<b>予告音氷ハズレ</b>ONで「設定1・2＝0%」。<br>
+  <small class="muted">※「未検出」は該当ラベルの近傍に有効な数値が見つからなかったことを示します。</small>
 </div>
 
 <div id="err" class="error"></div>
@@ -45,7 +50,8 @@
     <h3>テキスト（手動貼り付け）</h3>
     <div class="opts">
       <label class="kv"><input id="edit-mode" type="checkbox"> 編集モード</label>
-      <label class="kv"><input id="peace" type="checkbox"> ピースマーク出現（設定2以上確定）</label>
+      <label class="kv"><input id="peace" type="checkbox"> ピースマーク出現（設定2以上確定：設定1=0%）</label>
+      <label class="kv"><input id="yohaku-hazure" type="checkbox"> 予告音氷ハズレ（RB中1枚役告知でハズレ目：<b>設定5・6確定</b> → 設定1・2=0%）</label>
       <button id="btn-parse" class="btn" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:6px 10px;">テキストから解析</button>
     </div>
   </div>
@@ -65,14 +71,22 @@
   <div class="card">
     <h3>抽出シグナル（読み取り専用）</h3>
     <div class="subgrid">
-      <div><span class="key">BB斜め風鈴</span><span id="sig-bb-slant" class="pill muted">—</span></div>
-      <div><span class="key">BBレア役(バラケ目)</span><span id="sig-bb-rare" class="pill muted">—</span></div>
-      <div><span class="key">HCはずれ</span><span id="sig-rt-hc" class="pill muted">—</span></div>
-      <div><span class="key">HGはずれ</span><span id="sig-rt-hg" class="pill muted">—</span></div>
-      <div><span class="key">RB中ハズレ（回）</span><span id="sig-rb-miss" class="pill muted">—</span></div>
+      <div><span class="key">BB斜め風鈴</span><span id="sig-bb-slant" class="pill muted">未検出</span></div>
+      <div><span class="key">BBレア役(バラケ目)</span><span id="sig-bb-rare" class="pill muted">未検出</span></div>
+      <div><span class="key">HCはずれ</span><span id="sig-rt-hc" class="pill muted">未検出</span></div>
+      <div><span class="key">HGはずれ</span><span id="sig-rt-hg" class="pill muted">未検出</span></div>
+      <div><span class="key">RB中ハズレ（回）</span><span id="sig-rb-miss" class="pill muted">未検出</span></div>
+      <div><span class="key">予告音氷（ハズレ）</span><span id="sig-yohaku-hazure" class="pill muted">未検出</span></div>
     </div>
-    <div class="secnote">※数値が抽出できなかったシグナルは「—」表示。</div>
   </div>
+</div>
+
+<div class="card">
+  <h3>抽出一覧（全項目）<span class="tag">読み取り専用</span></h3>
+  <table id="table-all">
+    <thead><tr><th>項目</th><th>回数</th><th>分母</th><th>備考</th></tr></thead>
+    <tbody></tbody>
+  </table>
 </div>
 
 <div class="card">
@@ -94,13 +108,21 @@ const EXPECT = {
 };
 /* 合算・BB/RT/RB の“分母レンジ/期待値” */
 const RANGE = {
-  bell:   [4.5, 10.5],   // 1/7.x 付近
-  cherry: [10,  25],     // 1/15.x 付近
-  ice:    [35,  80],     // 1/50〜60 付近
-  bb_slant:[7,  13],     // BB斜め風鈴 ~9 or 11
-  bb_rare: [400, 30000], // バラケ目（6は ~655）
-  rt_hc:   [4.6, 6.6],   // 花火チャレンジ中はずれ
-  rt_hg:   [8.5, 14.5],  // 花火GAME中はずれ
+  bell:   [4.5, 10.5],   // 1/7.x
+  cherry: [10,  25],     // 1/15.x
+  ice:    [35,  80],     // 1/50〜60
+  bb_slant:[7,  13],     // ~9 or 11
+  bb_rare: [400, 30000], // 6は~655
+  rt_hc:   [4.6, 6.6],
+  rt_hg:   [8.5, 14.5],
+  // 一覧レンジ（広め）
+  bellA:[10,30], bellB:[10,30],
+  iceA:[35,90], iceB:[300,5000],
+  chA1:[80,140], chA2:[15,30], chB:[150,450],
+  total_any:[2,5000],
+  oneMedal:[8,25],
+  yohakuIce:[10,40],
+  bbFlat:[1.0,2.0],
 };
 const EXPECT_DENOM = {
   bb_slant: {1:11.0, 2:9.0, 5:11.0, 6:9.0},
@@ -110,10 +132,18 @@ const EXPECT_DENOM = {
 };
 const WEIGHTS = { bell:1.0, cherry:1.0, ice:0.7, bb_slant:1.1, bb_rare:2.2, rt_hc_miss:1.0, rt_hg_miss:1.0, rb_miss:1.6 };
 
+const NOTES = {
+  "レア役（バラケ目/BB中）": "BB中のベルの崩れ目",
+  "1枚役": "RB中の1枚役",
+  "予告音氷": "RB中の1枚役告知で氷揃い",
+  "予告音氷（ハズレ）": "RB中の1枚役告知でハズレ目（設定5・6確定）"
+};
+
 const state = {
   metrics:{games:undefined,bell:undefined,cherry:undefined,ice:undefined},
   extra:{bb_slant_den:null, bb_rare_den:null, rt_hc_den:null, rt_hg_den:null, rb_miss_count:null},
-  flags:{peace:false, edit:false},
+  flags:{peace:false, edit:false, yohakuHazure:false},
+  allItems:[],
   log:[]
 };
 
@@ -122,10 +152,7 @@ const $ = (id)=>document.getElementById(id);
 function toNum(x){ if(x==null) return undefined; const n=Number(String(x).replace(/,/g,'')); return Number.isFinite(n)?n:undefined; }
 function pushLog(msg){ state.log.push(msg); }
 function setError(msg){ const e=$("err"); e.style.display=msg?"block":"none"; e.textContent=msg||""; }
-function setText(id, s, mutedWhenDash=true){
-  const el=$(id); el.textContent=s;
-  if(mutedWhenDash) el.classList.toggle("muted", s==="—");
-}
+function setText(id, s){ const el=$(id); el.textContent=s; el.classList.toggle("muted", s==="未検出"); }
 
 /* サニタイズ */
 function sanitize(s){
@@ -145,7 +172,6 @@ function coalesceLines(lines){
   const out=[];
   for(let i=0;i<lines.length;i++){
     let cur=lines[i];
-
     if(/^(風鈴|チェリー|氷)\s*$/.test(cur) && i+1<lines.length && /^合算\s*$/.test(lines[i+1])){
       out.push(RegExp.$1 + "合算"); i++; continue;
     }
@@ -189,7 +215,7 @@ function collectAllPairs(lines){
   return pairs;
 }
 
-/* 近傍探索 */
+/* 近傍探索（±20行） */
 function pickNearBy(lines, labelIdx, window, range){
   if(labelIdx<0) return null;
   const [lo,hi]=range;
@@ -217,7 +243,7 @@ function pickNearBy(lines, labelIdx, window, range){
 /* ラベル→近傍→全体フォールバック */
 function resolveMetric(lines, labelRegex, range, labelName, globalPairs){
   const idx=lines.findIndex(l=>labelRegex.test(l));
-  let got=pickNearBy(lines, idx, 8, range);
+  let got=pickNearBy(lines, idx, 20, range);
   if(!got){
     const [lo,hi]=range;
     const expects = EXPECT[labelName]?.map(v=>1/v) ?? [];
@@ -229,9 +255,9 @@ function resolveMetric(lines, labelRegex, range, labelName, globalPairs){
       if(score<bestScore){ best=p; bestScore=score; }
     }
     got=best||null;
-    if(got) pushLog(`${labelName}: fallback採用 idx=${got.idx} → ${got.count}回 (1/${got.denom})`);
+    if(got) pushLog(`${labelName||'項目'}: fallback採用 idx=${got.idx} → ${got.count??'-'}回 (1/${got.denom??'-'})`);
   }else{
-    pushLog(`${labelName}: 近傍採用 idx=${got.idx} → ${got.count}回 (1/${got.denom})`);
+    pushLog(`${labelName||'項目'}: 近傍採用 idx=${got.idx} → ${got.count??'-'}回 (1/${got.denom??'-'})`);
   }
   return got;
 }
@@ -239,6 +265,7 @@ function resolveMetric(lines, labelRegex, range, labelName, globalPairs){
 /* === 解析本体 === */
 function parseMetricsFromText(raw){
   state.log = [];
+  state.allItems = [];
   const t = sanitize(raw);
   const rawLines = t.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   const lines = coalesceLines(rawLines);
@@ -250,7 +277,6 @@ function parseMetricsFromText(raw){
   const cands = lines.map(ln=>{ const m=RE_G_ONLY.exec(ln); return m?toNum(m[1]):null; }).filter(v=>v!=null);
   if(cands.length){ out.games = Math.max(...cands); pushLog(`総G: G-only最大 → ${out.games}`); } else pushLog("総G: 見つからず");
 
-  // 全体ペア
   const allPairs = collectAllPairs(lines);
 
   // 合算3種
@@ -258,38 +284,69 @@ function parseMetricsFromText(raw){
   const cherry = resolveMetric(lines, /チェリー\s*合算/, RANGE.cherry, "cherry", allPairs);
   const ice    = resolveMetric(lines, /氷\s*合算/,    RANGE.ice,    "ice",    allPairs);
 
-  if(bell){ out.bell=bell.count; pushLog(`風鈴合算= ${out.bell}回 1/${bell.denom}`); }
-  if(cherry){ out.cherry=cherry.count; pushLog(`チェリー合算= ${out.cherry}回 1/${cherry.denom}`); }
-  if(ice){ out.ice=ice.count; pushLog(`氷合算= ${out.ice}回 1/${ice.denom}`); }
+  if(bell){ out.bell=bell.count; addItem("風鈴合算", bell.count, bell.denom); }
+  if(cherry){ out.cherry=cherry.count; addItem("チェリー合算", cherry.count, cherry.denom); }
+  if(ice){ out.ice=ice.count; addItem("氷合算", ice.count, ice.denom); }
 
-  // 追加シグナル（近傍のみ）
-  const bbSlant = pickNearBy(lines, lines.findIndex(l=>/(風斜め揃い|斜め風鈴|風鈴B|風鈴中段揃)/.test(l)), 6, RANGE.bb_slant);
-  if(bbSlant){ extra.bb_slant_den = bbSlant.denom; pushLog(`BB斜め風鈴= 1/${extra.bb_slant_den}`); }
-
-  const bbRare = pickNearBy(lines, lines.findIndex(l=>/(レア役|バラケ目)/.test(l)), 6, RANGE.bb_rare);
-  if(bbRare){ extra.bb_rare_den = bbRare.denom; pushLog(`BBレア役(=バラケ目)= 1/${extra.bb_rare_den}`); }
-
-  const rtHC = pickNearBy(lines, lines.findIndex(l=>/花火チャレンジ中はずれ/.test(l)), 6, RANGE.rt_hc);
-  if(rtHC){ extra.rt_hc_den = rtHC.denom; pushLog(`HCはずれ= 1/${extra.rt_hc_den}`); }
-
-  const rtHG = pickNearBy(lines, lines.findIndex(l=>/花火GAME中はずれ/.test(l)), 6, RANGE.rt_hg);
-  if(rtHG){ extra.rt_hg_den = rtHG.denom; pushLog(`HGはずれ= 1/${extra.rt_hg_den}`); }
+  // 追加シグナル（近傍）
+  const bbSlant = pickNearBy(lines, lines.findIndex(l=>/(風斜め揃い|斜め風鈴|風鈴B)/.test(l)), 20, RANGE.bb_slant);
+  if(bbSlant){ extra.bb_slant_den = bbSlant.denom; addItem("風斜め揃い（BB中）", bbSlant.count, bbSlant.denom); }
+  const bbFlat = pickNearBy(lines, lines.findIndex(l=>/(風鈴中段揃)/.test(l)), 20, RANGE.bbFlat);
+  if(bbFlat){ addItem("風鈴中段揃（BB中）", bbFlat.count, bbFlat.denom); }
+  const bbRare = pickNearBy(lines, lines.findIndex(l=>/(レア役|バラケ目)/.test(l)), 20, RANGE.bb_rare);
+  if(bbRare){ extra.bb_rare_den = bbRare.denom; addItem("レア役（バラケ目/BB中）", bbRare.count, bbRare.denom); }
+  const rtHC = pickNearBy(lines, lines.findIndex(l=>/花火チャレンジ中はずれ/.test(l)), 20, RANGE.rt_hc);
+  if(rtHC){ extra.rt_hc_den = rtHC.denom; addItem("花火チャレンジ中はずれ", rtHC.count, rtHC.denom); }
+  const rtHG = pickNearBy(lines, lines.findIndex(l=>/花火GAME中はずれ/.test(l)), 20, RANGE.rt_hg);
+  if(rtHG){ extra.rt_hg_den = rtHG.denom; addItem("花火GAME中はずれ", rtHG.count, rtHG.denom); }
 
   // RB中ハズレ（“RB中”ラベル近傍）
   const rbIdx = lines.findIndex(l=>/(RB中詳細|RB中詳)/.test(l));
   if(rbIdx>=0){
-    // 回数だけ見る（分母はない前提）
-    for(let j=Math.max(0,rbIdx-8); j<Math.min(lines.length,rbIdx+9); j++){
+    for(let j=Math.max(0,rbIdx-20); j<Math.min(lines.length,rbIdx+21); j++){
       const c = lines[j].match(RE_KAI_LIKE);
-      if(c){ extra.rb_miss_count = toNum(c[1]); pushLog(`RB中ハズレ= ${extra.rb_miss_count}回`); break; }
+      if(c){ extra.rb_miss_count = toNum(c[1]); addItem("RB中ハズレ", extra.rb_miss_count, null); break; }
     }
+  }
+
+  // 内訳（A/B等）
+  addByLabel(lines, /風鈴A/, "風鈴A", RANGE.bellA);
+  addByLabel(lines, /風鈴B/, "風鈴B", RANGE.bellB);
+  addByLabel(lines, /氷A/,   "氷A",   RANGE.iceA);
+  addByLabel(lines, /氷B/,   "氷B",   RANGE.iceB);
+  addByLabel(lines, /チェリーA1/, "チェリーA1", RANGE.chA1);
+  addByLabel(lines, /チェリーA2/, "チェリーA2", RANGE.chA2);
+  addByLabel(lines, /チェリーB/,  "チェリーB",  RANGE.chB);
+
+  // 総ボーナス系
+  addByLabel(lines, /総ボーナス/, "総ボーナス", RANGE.total_any);
+  addByLabel(lines, /総BB|合計BB|BB合計/, "総BB", RANGE.total_any);
+  addByLabel(lines, /ドンBB/, "ドンBB", RANGE.total_any);
+  addByLabel(lines, /赤七BB|赤７BB/, "赤七BB", RANGE.total_any);
+  addByLabel(lines, /RB\b|REG\b|レギュラーボーナス/, "RB", RANGE.total_any);
+
+  // 1枚役／予告音氷
+  addByLabel(lines, /1枚役/, "1枚役", RANGE.oneMedal);
+  addByLabel(lines, /予告音氷/, "予告音氷", RANGE.yohakuIce);
+
+  // フラグ（予告音氷ハズレ）を一覧にも明示
+  if(state.flags.yohakuHazure){
+    addItem("予告音氷（ハズレ）", null, null);
   }
 
   state.extra = extra;
   updateSignals(extra);
   pushLog(`summary: bell=${out.bell??"-"} | cherry=${out.cherry??"-"} | ice=${out.ice??"-"} | bb_slant=1/${extra.bb_slant_den??"-"} | bb_rare=1/${extra.bb_rare_den??"-"} | hc=1/${extra.rt_hc_den??"-"} | hg=1/${extra.rt_hg_den??"-"} | rb_miss=${extra.rb_miss_count??"-"}`);
-
+  renderAllTable();
   return out;
+
+  function addItem(name, count, denom){
+    state.allItems.push({name, count: (Number.isFinite(count)? count : null), denom: (Number.isFinite(denom)? denom : null)});
+  }
+  function addByLabel(lines, labelRe, labelName, range){
+    const got = resolveMetric(lines, labelRe, range, null, allPairs);
+    if(got) addItem(labelName, got.count, got.denom);
+  }
 }
 
 /* ---------- 推測（尤度ベース：二項ログ尤度 + 追加指標のガウス罰則） ---------- */
@@ -315,8 +372,9 @@ function estimateAllSettings(m){
       if((s===1||s===2)&&miss>0){ ll -= WEIGHTS.rb_miss*(1+miss); used++; }
       if((s===5||s===6)&&miss>0){ ll += WEIGHTS.rb_miss*Math.min(1,miss*0.2); used++; }
     }
-    // ピースマーク → 設定1排除
-    if(s===1 && state.flags.peace){ ll = -Infinity; used++; }
+    // 追加制約
+    if(s===1 && state.flags.peace){ ll = -Infinity; used++; }           // ピース → 設定1禁止
+    if((s===1||s===2) && state.flags.yohakuHazure){ ll = -Infinity; used++; } // 予告音氷ハズレ → 1・2禁止
     return {setting:s, ll: used? ll : -Infinity};
   });
 
@@ -353,18 +411,19 @@ function renderBars(){
   });
 }
 function updateSignals(ex){
-  setText("sig-bb-slant", ex.bb_slant_den? `1/${ex.bb_slant_den}` : "—");
-  setText("sig-bb-rare",  ex.bb_rare_den ? `1/${ex.bb_rare_den}`  : "—");
-  setText("sig-rt-hc",    ex.rt_hc_den   ? `1/${ex.rt_hc_den}`    : "—");
-  setText("sig-rt-hg",    ex.rt_hg_den   ? `1/${ex.rt_hg_den}`    : "—");
-  setText("sig-rb-miss",  Number.isFinite(ex.rb_miss_count)? `${ex.rb_miss_count}回` : "—");
+  setText("sig-bb-slant", ex.bb_slant_den? `1/${ex.bb_slant_den}` : "未検出");
+  setText("sig-bb-rare",  ex.bb_rare_den ? `1/${ex.bb_rare_den}`  : "未検出");
+  setText("sig-rt-hc",    ex.rt_hc_den   ? `1/${ex.rt_hc_den}`    : "未検出");
+  setText("sig-rt-hg",    ex.rt_hg_den   ? `1/${ex.rt_hg_den}`    : "未検出");
+  setText("sig-rb-miss",  Number.isFinite(ex.rb_miss_count)? `${ex.rb_miss_count}回` : "未検出");
+  setText("sig-yohaku-hazure", state.flags.yohakuHazure? "チェックON（設定1・2=0%）" : "未検出");
 }
 
 const METRIC_KEYS=["games","bell","cherry","ice"];
 const METRIC_LABEL={games:"総G", bell:"風鈴合算（回）", cherry:"チェリー合算（回）", ice:"氷合算（回）"};
 function renderMetrics(firstRender=false){
   const wrap=$("metrics");
-  if(firstRender){ // 初回だけDOM構築。以降は値とdisabledだけ更新してフォーカスを守る
+  if(firstRender){
     wrap.innerHTML="";
     METRIC_KEYS.forEach(k=>{
       const row=document.createElement("label"); row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
@@ -375,17 +434,15 @@ function renderMetrics(firstRender=false){
         if(!state.flags.edit) return;
         const v = e.target.value==="" ? undefined : toNum(e.target.value);
         state.metrics[k]=v;
-        // 入力中は再レンダしない→フォーカス保持、バーのみ更新
         renderBars();
         updatePerG(k);
       };
-      input.onblur=()=>{ renderMetrics(false); }; // フォーカス抜けたら全体同期
+      input.onblur=()=>{ renderMetrics(false); };
       row.appendChild(input);
       const tail=document.createElement("span"); tail.className="perg"; tail.id=`perg-${k}`; row.appendChild(tail);
       wrap.appendChild(row);
     });
   }
-  // 値＆disabled更新
   METRIC_KEYS.forEach(k=>{
     const input=$(`inp-${k}`);
     if(document.activeElement!==input){ input.value = state.metrics[k]??""; }
@@ -393,7 +450,6 @@ function renderMetrics(firstRender=false){
     updatePerG(k);
   });
 
-  // ログ
   const ul = $("log"); ul.innerHTML = "";
   state.log.slice(-30).forEach(msg=>{ const li=document.createElement("li"); li.textContent=msg; ul.appendChild(li); });
 }
@@ -403,6 +459,27 @@ function updatePerG(k){
     const per=(toNum(state.metrics[k])||0)/toNum(state.metrics.games);
     span.textContent = Number.isFinite(per) ? "/G "+per.toFixed(4) : "";
   }else span.textContent="";
+}
+
+function renderAllTable(){
+  const tb = $("table-all").querySelector("tbody");
+  tb.innerHTML = "";
+  const rows = state.allItems;
+  if(!rows.length){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td colspan="4" class="muted">抽出できた項目がありません。</td>`;
+    tb.appendChild(tr);
+    return;
+  }
+  rows.forEach(r=>{
+    const tr = document.createElement("tr");
+    const note = NOTES[r.name] || "";
+    tr.innerHTML = `<td>${r.name}</td>
+      <td>${Number.isFinite(r.count)? r.count : "—"}</td>
+      <td>${Number.isFinite(r.denom)? "1/"+r.denom : "—"}</td>
+      <td>${note||"—"}</td>`;
+    tb.appendChild(tr);
+  });
 }
 
 /* ---------- init ---------- */
@@ -425,10 +502,10 @@ function init(){
 
   $("edit-mode").addEventListener("change",(e)=>{ state.flags.edit = e.target.checked; renderMetrics(false); });
   $("peace").addEventListener("change",(e)=>{ state.flags.peace = e.target.checked; renderBars(); });
+  $("yohaku-hazure").addEventListener("change",(e)=>{ state.flags.yohakuHazure = e.target.checked; updateSignals(state.extra); renderBars(); });
 
   // デモ用自己テスト（必要なら削除OK）
   const sample = `新ハナビ
-基本情報
 総プレイ数
 小役
 風鈴
@@ -438,6 +515,7 @@ function init(){
 チェリー
 合算
 BB中詳細
+風鈴中段揃
 風斜め揃い
 レア役
 RT
@@ -445,13 +523,43 @@ RT
 はずれ
 花火GAME中
 はずれ
+総ボーナス
+総BB
+ドンBB
+赤七BB
+RB
 6,056G
+46回
+1/131.7
+35回
+1/173.0
+16回
+1/378.5
+19回
+1/318.7
+11回
+1/550.5
 813回
 1/7.4
 103回
 1/58.8
 393回
-1/15.4`;
+1/15.4
+910回
+1/1.1
+103回
+1/9.8
+1回
+1/1,014.0
+83回
+1/6.1
+42回
+1/13.0
+1枚役
+8回
+1/12.0
+予告音氷
+1/24.0`;
   state.metrics = parseMetricsFromText(sample);
   renderMetrics(false); renderBars();
 }
