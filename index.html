@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜新ハナビ 専用（最終修正版：2025.10.11）</title>
+<title>特リプTV｜新ハナビ 専用（最終調整版：2025.10.11）</title>
 <style>
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
   h1{font-size:20px;margin:0 0 12px}
@@ -37,19 +37,18 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜新ハナビ 専用（最終修正版：2025.10.11）</h1>
+<h1>特リプTV｜新ハナビ 専用（最終調整版：2025.10.11）</h1>
 
 <div class="card">
   <h3>機種選択</h3>
   <select id="machine-select">
-    <option value="SHIN_HANABI">新ハナビ 専用（最終修正版：2025.10.11）</option>
+    <option value="SHIN_HANABI">新ハナビ 専用</option>
     </select>
 </div>
 
 <div class="hint">
-  OCR崩れに強い抽出（<b>行連結</b>→<b>近傍±20行×分母レンジ</b>→全体フォールバック）＋<b>二項ログ尤度</b>で設定比較。<br>
-  <b>ピースマーク</b>ONで「設定1＝0%」、<b>予告音氷ハズレ</b>ONで「設定1・2＝0%」。<br>
-  <span style="color:#2563eb;">💡 推奨: OCRアプリでテキスト化後、<b>『RB中ハズレ（回）』</b>をユニメモで確認し、<b>編集モード</b>で入力してください。</span>
+  OCR崩れに強い抽出＋<b>BBレア役の重み調整</b>で結果の偏りを抑制。<br>
+  **RB中ハズレ**の回数は、ユニメモで確認し、**編集モード**で手動入力してください。
   <small class="muted">※「未検出」は該当ラベルの近傍に有効な数値が見つからなかったことを示します。</small>
 </div>
 
@@ -135,8 +134,8 @@ const MACHINE_DATA = {
       rt_hc_miss:{1:6.0,  2:5.8,  5:5.3,  6:5.1},
       rt_hg_miss:{1:13.4, 2:12.4, 5:10.1, 6:9.5}
     },
-    // 重み (BBレア役の重みを0.5に下げ、他の小役の尤度が優先されるように調整)
-    WEIGHTS: { bell:1.0, cherry:1.0, ice:0.7, bb_slant:1.1, bb_rare:0.5, rt_hc_miss:1.0, rt_hg_miss:1.0, rb_miss:1.6 },
+    // 【再調整】BBレア役の重みを0.2に大幅に下げ、他の小役の尤度が優先されるように調整
+    WEIGHTS: { bell:1.0, cherry:1.0, ice:0.7, bb_slant:1.1, bb_rare:0.2, rt_hc_miss:1.0, rt_hg_miss:1.0, rb_miss:1.6 },
     // 設定リスト
     SETTINGS: [1, 2, 5, 6],
     // 備考
@@ -152,7 +151,6 @@ const MACHINE_DATA = {
 let currentMachine = MACHINE_DATA.SHIN_HANABI;
 
 const state = {
-  // rb_miss_count を metrics に追加し、手動入力の対象とする
   metrics:{games:undefined,bell:undefined,cherry:undefined,ice:undefined,rb_miss_count:undefined}, 
   extra:{bb_slant_den:null, bb_rare_den:null, rt_hc_den:null, rt_hg_den:null},
   flags:{peace:false, edit:false, yohakuHazure:false},
@@ -268,7 +266,9 @@ function pickNearBy(lines, labelIdx, window, range){
 function resolveMetric(lines, labelRegex, range, labelName, globalPairs){
   const idx=lines.findIndex(l=>labelRegex.test(l));
   let got=pickNearBy(lines, idx, 20, range);
-  if(!got){
+  
+  // 【重要修正】小役3種以外は全体フォールバックロジックを無効化し、ボーナス回数の誤認識を防ぐ
+  if(!got && ["bell", "cherry", "ice"].includes(labelName)){
     const [lo,hi]=range;
     const expects = currentMachine.EXPECT[labelName]?.map(v=>1/v) ?? [];
     let best=null, bestScore=Infinity;
@@ -281,7 +281,7 @@ function resolveMetric(lines, labelRegex, range, labelName, globalPairs){
     }
     got=best||null;
     if(got) pushLog(`${labelName||'項目'}: fallback採用 idx=${got.idx} → ${got.count??'-'}回 (1/${got.denom??'-'})`);
-  }else{
+  }else if(got){
     pushLog(`${labelName||'項目'}: 近傍採用 idx=${got.idx} → ${got.count??'-'}回 (1/${got.denom??'-'})`);
   }
   return got;
@@ -295,7 +295,6 @@ function parseMetricsFromText(raw){
   const rawLines = t.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
   const lines = coalesceLines(rawLines);
 
-  // metricsを初期化 (rb_miss_countは手動入力を活かすため、undefinedのみセット)
   const out = {games:undefined,bell:undefined,cherry:undefined,ice:undefined,rb_miss_count:undefined}; 
   const extra = {bb_slant_den:null, bb_rare_den:null, rt_hc_den:null, rt_hg_den:null};
 
@@ -326,50 +325,53 @@ function parseMetricsFromText(raw){
   const rtHG = pickNearBy(lines, lines.findIndex(l=>/花火GAME中はずれ/.test(l)), 20, currentMachine.RANGE.rt_hg);
   if(rtHG){ extra.rt_hg_den = rtHG.denom; addItem("花火GAME中はずれ", rtHG.count, rtHG.denom); }
 
-  // RB中ハズレ: 自動抽出ロジックを削除（手動入力に依存）
+  // RB中ハズレ: 自動抽出ロジックは削除済（手動入力に依存）
   // out.rb_miss_count は undefined のまま。手動入力は renderMetrics で処理される。
-  // ただし、allItemsには手動入力用の項目を最初に追加しておく
-  if(!Number.isFinite(state.metrics.rb_miss_count)){
-    addItem("RB中ハズレ", state.metrics.rb_miss_count, null);
-  }
+  
+  // 内訳（A/B等） - これらの項目は fallback を使わない
+  addByLabelNear(lines, /風鈴A/, "風鈴A", currentMachine.RANGE.bellA);
+  addByLabelNear(lines, /風鈴B/, "風鈴B", currentMachine.RANGE.bellB);
+  addByLabelNear(lines, /氷A/,   "氷A",   currentMachine.RANGE.iceA);
+  addByLabelNear(lines, /氷B/,   "氷B",   currentMachine.RANGE.iceB);
+  addByLabelNear(lines, /チェリーA1/, "チェリーA1", currentMachine.RANGE.chA1);
+  addByLabelNear(lines, /チェリーA2/, "チェリーA2", currentMachine.RANGE.chA2);
+  addByLabelNear(lines, /チェリーB/,  "チェリーB",  currentMachine.RANGE.chB);
 
-  // 内訳（A/B等）
-  addByLabel(lines, /風鈴A/, "風鈴A", currentMachine.RANGE.bellA);
-  addByLabel(lines, /風鈴B/, "風鈴B", currentMachine.RANGE.bellB);
-  addByLabel(lines, /氷A/,   "氷A",   currentMachine.RANGE.iceA);
-  addByLabel(lines, /氷B/,   "氷B",   currentMachine.RANGE.iceB);
-  addByLabel(lines, /チェリーA1/, "チェリーA1", currentMachine.RANGE.chA1);
-  addByLabel(lines, /チェリーA2/, "チェリーA2", currentMachine.RANGE.chA2);
-  addByLabel(lines, /チェリーB/,  "チェリーB",  currentMachine.RANGE.chB);
+  // 総ボーナス系 - これらの項目は fallback を使わない
+  addByLabelNear(lines, /総ボーナス|総术一十ㄡ|総ボ一十ス/, "総ボーナス", currentMachine.RANGE.total_any);
+  addByLabelNear(lines, /総BB|合計BB|BB合計|綌BB|FyBB/, "総BB", currentMachine.RANGE.total_any);
+  addByLabelNear(lines, /ドンBB|FyBB/, "ドンBB", currentMachine.RANGE.total_any);
+  addByLabelNear(lines, /赤七BB|赤７BB/, "赤七BB", currentMachine.RANGE.total_any);
+  addByLabelNear(lines, /RB\b|REG\b|レギュラーボーナス|R B/, "RB", currentMachine.RANGE.total_any);
 
-  // 総ボーナス系 (OCR誤認識パターン追加)
-  addByLabel(lines, /総ボーナス|総术一十ㄡ|総ボ一十ス/, "総ボーナス", currentMachine.RANGE.total_any);
-  addByLabel(lines, /総BB|合計BB|BB合計|綌BB|FyBB/, "総BB", currentMachine.RANGE.total_any);
-  addByLabel(lines, /ドンBB|FyBB/, "ドンBB", currentMachine.RANGE.total_any);
-  addByLabel(lines, /赤七BB|赤７BB/, "赤七BB", currentMachine.RANGE.total_any);
-  addByLabel(lines, /RB\b|REG\b|レギュラーボーナス|R B/, "RB", currentMachine.RANGE.total_any);
-
-  // 1枚役／予告音氷
-  addByLabel(lines, /1枚役/, "1枚役", currentMachine.RANGE.oneMedal);
-  addByLabel(lines, /予告音氷/, "予告音氷", currentMachine.RANGE.yohakuIce);
+  // 1枚役／予告音氷 - これらの項目は fallback を使わない
+  addByLabelNear(lines, /1枚役/, "1枚役", currentMachine.RANGE.oneMedal);
+  addByLabelNear(lines, /予告音氷/, "予告音氷", currentMachine.RANGE.yohakuIce);
 
   // フラグ（予告音氷ハズレ）を一覧にも明示
   if(state.flags.yohakuHazure){
     addItem("予告音氷（ハズレ）", null, null);
   }
 
+  // RB中ハズレの項目を全アイテムリストに追加（手動入力項目なので、値はstateから）
+  const rbMissCount = toNum(state.metrics.rb_miss_count);
+  addItem("RB中ハズレ", rbMissCount, null);
+
+
   state.extra = extra;
   updateSignals(extra);
   pushLog(`summary: bell=${out.bell??"-"} | cherry=${out.cherry??"-"} | ice=${out.ice??"-"} | bb_slant=1/${extra.bb_slant_den??"-"} | bb_rare=1/${extra.bb_rare_den??"-"} | hc=1/${extra.rt_hc_den??"-"} | hg=1/${extra.rt_hg_den??"-"} | rb_miss=${state.metrics.rb_miss_count??"-"}`);
   renderAllTable();
-  // out には rb_miss_count は undefined のため、既存の state.metrics.rb_miss_count の値を使うために out は一部のみ返す
+  
   return {games:out.games, bell:out.bell, cherry:out.cherry, ice:out.ice};
 
   function addItem(name, count, denom){
     state.allItems.push({name, count: (Number.isFinite(count)? count : null), denom: (Number.isFinite(denom)? denom : null)});
   }
-  function addByLabel(lines, labelRe, labelName, range){
-    const got = resolveMetric(lines, labelRe, range, null, allPairs);
+  function addByLabelNear(lines, labelRe, labelName, range){
+    // fallbackを使わず、近傍探索のみを実行
+    const idx=lines.findIndex(l=>labelRe.test(l));
+    const got = pickNearBy(lines, idx, 20, range);
     if(got) addItem(labelName, got.count, got.denom);
   }
 }
@@ -392,6 +394,7 @@ function estimateAllSettings(m){
     
     // 追加指標 (分母ベース)
     if(state.extra.bb_slant_den){ ll+=penalty_denom(state.extra.bb_slant_den, currentMachine.EXPECT_DENOM.bb_slant[s], currentMachine.WEIGHTS.bb_slant); used++; }
+    // 【再調整】BBレア役の重みを大幅に下げ、設定6への過度な偏りを防ぐ
     if(state.extra.bb_rare_den){ ll+=penalty_denom(state.extra.bb_rare_den, currentMachine.EXPECT_DENOM.bb_rare[s], currentMachine.WEIGHTS.bb_rare); used++; }
     if(state.extra.rt_hc_den){ ll+=penalty_denom(state.extra.rt_hc_den, currentMachine.EXPECT_DENOM.rt_hc_miss[s], currentMachine.WEIGHTS.rt_hc_miss); used++; }
     if(state.extra.rt_hg_den){ ll+=penalty_denom(state.extra.rt_hg_den, currentMachine.EXPECT_DENOM.rt_hg_miss[s], currentMachine.WEIGHTS.rt_hg_miss); used++; }
@@ -506,8 +509,20 @@ function updatePerG(k){
 function renderAllTable(){
   const tb = $("table-all").querySelector("tbody");
   tb.innerHTML = "";
-  const rows = state.allItems;
-  if(!rows.length){
+  const rows = state.allItems.filter(r => r.name !== "RB中ハズレ");
+  
+  // RB中ハズレは手動入力項目なので、リストの先頭に表示する
+  const rbMissRow = state.allItems.find(r => r.name === "RB中ハズレ");
+  if(rbMissRow){
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${rbMissRow.name}</td>
+      <td>${Number.isFinite(rbMissRow.count)? rbMissRow.count : "—"}</td>
+      <td>—</td>
+      <td>手動入力項目</td>`;
+    tb.appendChild(tr);
+  }
+
+  if(!rows.length && !rbMissRow){
     const tr = document.createElement("tr");
     tr.innerHTML = `<td colspan="4" class="muted">抽出できた項目がありません。</td>`;
     tb.appendChild(tr);
@@ -532,7 +547,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜${currentMachine.displayName}（最終修正版：2025.10.11）`;
+    document.querySelector('h1').textContent = `特リプTV｜${currentMachine.displayName}（最終調整版：2025.10.11）`;
     
     // データをクリアして再描画
     state.metrics={games:undefined,bell:undefined,cherry:undefined,ice:undefined,rb_miss_count:undefined};
