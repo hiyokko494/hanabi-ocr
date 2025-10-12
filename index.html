@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.13）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.14）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.13）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.14）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
@@ -265,8 +265,10 @@ function coalesceLines(lines){
 /* パターン */
 const RE_G_ONLY   = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
 const RE_KAI_LIKE = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*$/i; // Count only line (start/end anchors)
+// Rev. 14 NEW: Ultra-loose count-only line (just the number, no '回' needed)
+const RE_COUNT_ONLY_LINE = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*$/;
 const RE_FRAC_ANY = /[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
-const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere
+const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere (requires '回' or similar)
 // Rev.13 Fix: Re-introduce non-greedy matching (.*?) between count and fraction for single line.
 const RE_COUNT_FRAC_PAIR = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*.*?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
 
@@ -290,7 +292,7 @@ function collectAllPairs(lines){
         if(count!=null && Number.isFinite(denom)){ out.push({idx:i,count,denom, type:"A"}); continue; }
     }
     
-    // Case B (Split line: Count on line i, Denom on line i+1)
+    // Case B (Split line: Count on line i, Denom on line i+1). Use RE_KAI_LIKE for count.
     const c=cur.match(RE_KAI_LIKE);
     const f=(i+1<lines.length)?lines[i+1].match(RE_FRAC_ANY):null;
     if(c && f){ 
@@ -316,7 +318,7 @@ function pickNearBy(lines, labelIdx, window, range){
     let currentBest = null;
     const line = lines[j];
 
-    // Case A (Rev.13: Same line, flexible match)
+    // Case A (Single line, flexible match)
     const pair_match = line.match(RE_COUNT_FRAC_PAIR); 
     if (pair_match) {
         // pair_match[1] is the count, pair_match[2] is the denom
@@ -329,15 +331,19 @@ function pickNearBy(lines, labelIdx, window, range){
     }
 
     // Case B (Split line: Count on line j, Denom on line j+1).
-    // ただし、Case Aで既に検出されている行（j）はスキップしない（両パターンにヒットする可能性があるため）。
     if (!currentBest && j+1 < lines.length) {
-        // Line j: Check for any count with '回' (or similar) attached, anywhere in the line.
-        const c=line.match(RE_COUNT_GLOBAL); 
-        // Line j+1: Check for a fraction, anywhere in the line.
+        
+        // Line j: Check for ANY count (Count with '回' OR just a number line)
+        const c_global=line.match(RE_COUNT_GLOBAL); // Count with '回'
+        const c_only=line.match(RE_COUNT_ONLY_LINE); // Just a number (Rev. 14 NEW)
+        
+        const countMatch = c_global || c_only; // Use the match object from whichever matched
+
+        // Line j+1: Check for a fraction
         const f=lines[j+1].match(RE_FRAC_ANY);
         
-        if(c && f){
-            const cnt=toNum(c[1]); 
+        if(countMatch && f){
+            const cnt=toNum(countMatch[1]); 
             const den=parseFloat(f[1].replace(/,/g,''));
             // Check range before setting best
             if(cnt!=null && Number.isFinite(den) && den>=lo && den<=hi){
@@ -377,12 +383,16 @@ function pickCountNear(lines, labelIdx, window, countLabelRe, rejectFrac=true){
     const line = lines[j];
     // ラベル行またはその近傍で回数のみを探す
     // Rev.8: RE_COUNT_GLOBAL を使用し、行のどこに回数があっても検出可能に。
-    const c=line.match(RE_COUNT_GLOBAL); 
+    const c_global=line.match(RE_COUNT_GLOBAL); // 回数＋「回」
+    const c_only=line.match(RE_COUNT_ONLY_LINE); // 数字のみの行 (Rev. 14)
+    
+    const countMatch = c_global || c_only;
+    
     // countLabelRe が指定されている場合、そのラベル行自身とその近傍の行を探索
     const isTargetLabel = countLabelRe ? countLabelRe.test(line) : true;
     
-    if(c && isTargetLabel){
-      const cnt=toNum(c[1]);
+    if(countMatch && isTargetLabel){
+      const cnt=toNum(countMatch[1]);
       // rejectFrac=true の場合、この行に分母が含まれていないことを確認（誤検知対策）
       if(cnt!=null && (!rejectFrac || line.match(RE_FRAC_ANY) === null)){
         const dist=Math.abs(j-labelIdx);
@@ -725,6 +735,7 @@ function renderMetrics(firstRender=false){
         if(!state.flags.edit) return;
         const v = e.target.value==="" ? undefined : toNum(e.target.value);
         state.metrics[k]=v;
+        state.extra[`${k}_den`] = v != null && state.metrics.games != null && state.metrics.games > 0 ? state.metrics.games / v : undefined;
         renderBars();
         updatePerG(k);
       };
@@ -794,10 +805,12 @@ function updatePerG(k){
   const g = toNum(state.metrics.games);
   const count = toNum(state.metrics[k]);
   
-  if(k!=="games" && g && Number.isFinite(count)){
-    const per=(count||0)/g;
-    span.textContent = Number.isFinite(per) ? "/G "+per.toFixed(4) : "";
-  }else if (k==="games") {
+  if(k!=="games" && g && Number.isFinite(count) && count > 0){
+    const denom=g/count;
+    span.textContent = Number.isFinite(denom) ? "1/"+denom.toFixed(2) : "";
+  } else if(k!=="games" && count === 0 && g && g > 0) {
+    span.textContent = "1/-"; // 0回の場合は1/-
+  } else if (k==="games") {
     span.textContent = "/G 0.0000"; 
   } else {
     span.textContent = "";
@@ -816,9 +829,10 @@ function renderAllTable(){
   rows.forEach(r=>{
     const tr = document.createElement("tr");
     const note = currentMachine.NOTES[r.name] || "";
+    const denomText = r.denom != null ? "1/"+r.denom.toFixed(2) : (r.count === 0 ? "1/-" : "—");
     tr.innerHTML = `<td>${r.name}</td>
       <td>${Number.isFinite(r.count)? r.count : "—"}</td>
-      <td>${Number.isFinite(r.denom)? "1/"+r.denom.toFixed(2) : "—"}</td>
+      <td>${denomText}</td>
       <td>${note||"—"}</td>`;
     tb.appendChild(tr);
   });
@@ -832,7 +846,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.13）`; // <-- Rev.13に更新
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.14）`; // <-- Rev.14に更新
     
     // データをクリアして初期化
     state.metrics={games:undefined};
