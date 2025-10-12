@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.3）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.4）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.3）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.4）</h1>
 
 <div class="card">
   <div class="control-row">
@@ -482,7 +482,7 @@ function parseMetricsFromText(raw){
   state.metrics = {...state.metrics, ...out};
   state.extra = {...state.extra, ...extra}; 
   
-  // 総Gの値をUIに確実に反映
+  // 総Gの値をUIに確実に反映 (Rev.3で追加)
   const gameInput = $("inp-games");
   if (gameInput) gameInput.value = state.metrics.games ?? "";
 
@@ -755,7 +755,7 @@ function renderMetrics(firstRender=false){
       row=document.createElement("label"); row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
       keySpan=document.createElement("span"); keySpan.className="key"; 
       keySpan.textContent=currentMachine.METRIC_LABELS[rbMissKey] || rbMissKey; row.appendChild(keySpan);
-      input=document.createElement("input"); input.type="number"; input.step="1"; input.id:`inp-${rbMissKey}`;
+      input=document.createElement("input"); input.type="number"; input.step="1"; input.id=`inp-${rbMissKey}`;
       
       const val = state.extra[rbMissKey] ?? undefined;
       input.value = val ?? "";
@@ -848,7 +848,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.3）`;
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.4）`;
     
     // データをクリアして初期化
     state.metrics={games:undefined};
@@ -948,6 +948,8 @@ RB特殊終了画面表示回数 0回
 
   $("edit-mode").addEventListener("change",(e)=>{ state.flags.edit = e.target.checked; renderMetrics(false); });
 }
+
+// 修正点: init() の呼び出しを追加
 init();
 </script>
 </body>
