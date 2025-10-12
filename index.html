@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.9）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.10）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.9）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.10）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
@@ -266,7 +266,7 @@ function coalesceLines(lines){
 const RE_G_ONLY   = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
 const RE_KAI_LIKE = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*$/i; // Count only line (start/end anchors)
 const RE_FRAC_ANY = /[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
-const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere (used in pickCountNear)
+const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere (used in pickCountNear and Rev.10 split line)
 // Rev.9 Fix: Combined regex for Case A (Count + Fraction on same line), making '回' optional
 const RE_COUNT_FRAC_PAIR = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
 
@@ -320,13 +320,17 @@ function pickNearBy(lines, labelIdx, window, range){
         }
     }
 
-    // Case B: Count on line j (Count only line, uses ^$), Denom on line j+1
+    // Case B (Rev.10 Improvement): Check for ANY count (RE_COUNT_GLOBAL) on line j and ANY fraction (RE_FRAC_ANY) on line j+1.
+    // This allows the count line to contain other text (like the small role name from OCR failure)
     if (!currentBest && j+1 < lines.length) {
-        const c=line.match(RE_KAI_LIKE); 
+        // Line j: Check for any count with '回' (or similar) attached, anywhere in the line.
+        const c=line.match(RE_COUNT_GLOBAL); 
+        // Line j+1: Check for a fraction, anywhere in the line.
         const f=lines[j+1].match(RE_FRAC_ANY);
         
         if(c && f){
-            const cnt=toNum(c[1]); const den=parseFloat(f[1].replace(/,/g,''));
+            const cnt=toNum(c[1]); 
+            const den=parseFloat(f[1].replace(/,/g,''));
             if(cnt!=null && Number.isFinite(den) && den>=lo && den<=hi){
                 currentBest = {count:cnt, denom:den, idx:j}; 
             }
@@ -814,7 +818,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.9）`; // <-- Rev.9に更新
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.10）`; // <-- Rev.10に更新
     
     // データをクリアして初期化
     state.metrics={games:undefined};
