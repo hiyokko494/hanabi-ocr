@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.2）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.3）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.2）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.3）</h1>
 
 <div class="card">
   <div class="control-row">
@@ -138,9 +138,9 @@ const MACHINE_DATA = {
     // 必須メトリクス（総G除く）
     PRIMARY_METRICS: ["bell", "cherry", "ice", "rb_miss_count"],
     METRIC_LABELS: {games:"総G", bell:"風鈴合算（回）", cherry:"チェリー合算（回）", ice:"氷合算（回）", rb_miss_count:"RB中ハズレ（回）"},
-    // OCR認識用正規表現
+    // OCR認識用正規表現 - 「回数」や「合計」の有無に対応
     REGEX: {
-      bell: /風鈴\s*(?:合算|合計|全)/, cherry: /チェリー\s*(?:合算|合計|全|チエリ)/, ice: /氷\s*合算/,
+      bell: /風鈴\s*(?:合算|合計|全)(?:回数)?/, cherry: /チェリー\s*(?:合算|合計|全|チエリ)(?:回数)?/, ice: /氷\s*合算(?:回数)?/,
       bb_slant: /(風斜め揃い|斜め風鈴|風鈴B|風斜め揃|風鈴斜め揃)/, bb_rare: /(レア役|バラケ目|レア)/,
       rt_hc: /花火チャレンジ中はずれ/, rt_hg: /花火GAME中はずれ/,
       rb_miss_label: /(RB中ハズレ|ハズレ)/, // RB中詳細の近傍で探すためのラベル
@@ -187,9 +187,9 @@ const MACHINE_DATA = {
     METRIC_LABELS: {
       games:"総G", wing:"羽（回）", three_medal:"3枚役（回）", cherryA_sum:"チェリーA合算（回）", cherryB:"チェリーB（回）", grape_sum:"ブドウ合算（回）"
     },
-    // OCR認識用正規表現
+    // OCR認識用正規表現 - 「回数」や「合計」の有無に対応
     REGEX: {
-      wing: /羽\b|羽合算/, three_medal: /3枚役/, cherryA_sum: /チェリーA(?:合算|合計)/, cherryB: /チェリーB/, grape_sum: /ブドウ(?:合算|合計)/,
+      wing: /羽\b|羽(?:合算|合計)(?:回数)?/, three_medal: /3枚役(?:回数)?/, cherryA_sum: /チェリーA(?:合算|合計)(?:回数)?/, cherryB: /チェリーB(?:回数)?/, grape_sum: /ブドウ(?:合算|合計)(?:回数)?/,
       bb_reach_hazure_label: /リーチ目(?:ハズレ|ハズレ目)/, // BB中詳細の近傍で探す
       rb_special_end_label: /RB特殊終了画面表示回数/, // その他の近傍で探す
       bb_wing_hahan: /BB中羽羽鳥C/,
@@ -300,7 +300,14 @@ function collectAllPairs(lines){
   return pairs;
 }
 
-/* 近傍探索（±20行） */
+/**
+ * 近傍探索（ウィンドウサイズを5行に狭くした）
+ * @param {string[]} lines - テキストの行配列
+ * @param {number} labelIdx - ラベルのインデックス
+ * @param {number} window - 探索する行数 (例: 5)
+ * @param {number[]} range - 許容する分母の範囲 [lo, hi]
+ * @returns {{count: number, denom: number, idx: number}|null}
+ */
 function pickNearBy(lines, labelIdx, window, range){
   if(labelIdx<0) return null;
   const [lo,hi]=range;
@@ -330,7 +337,8 @@ function pickNearBy(lines, labelIdx, window, range){
 /* ラベル→近傍→全体フォールバック */
 function resolveMetric(lines, labelRegex, range, labelKey, globalPairs){
   const idx=lines.findIndex(l=>labelRegex.test(l));
-  let got=pickNearBy(lines, idx, 20, range);
+  // 近傍探索ウィンドウを 5行 に限定 (Rev.3: 誤検知防止)
+  let got=pickNearBy(lines, idx, 5, range); 
   
   if(!got && labelKey && currentMachine.PRIMARY_METRICS.includes(labelKey)){
     const [lo,hi]=range;
@@ -377,7 +385,6 @@ function pickCountNear(lines, labelIdx, window, countLabelRe, rejectFrac=true){
 function parseMetricsFromText(raw){
   state.log = [];
   state.allItems = [];
-  // state.flags の更新（チェックボックスの状態をリセットしない）
   
   const t = sanitize(raw);
   const rawLines = t.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
@@ -398,48 +405,47 @@ function parseMetricsFromText(raw){
     const labelRe = currentMachine.REGEX[key];
     const range = currentMachine.RANGE[key];
     if (labelRe && range) {
+      // RB中ハズレ/特殊終了画面（回数のみの項目）は近傍の回数を優先
+      if (key === "rb_miss_count" && state.currentMachineKey === "SHIN_HANABI") {
+        const rbIdx = lines.findIndex(l=>/(RB中詳細|RB中詳)/.test(l));
+        const count = pickCountNear(lines, rbIdx, 5, currentMachine.REGEX.rb_miss_label, true); // window=5
+        out.rb_miss_count = count; // state.metricsに入れる
+        extra.rb_miss_count = count; // extraにも入れる
+        if(Number.isFinite(count)) addItem(currentMachine.METRIC_LABELS[key].replace(/（回）/, ""), count, null);
+      } else if (key === "rb_special_end" && state.currentMachineKey === "ALEX_BRIGHT") {
+        // RB特殊終了画面表示回数（回数のみ）- ロジックを pickCountNear に変更 (rejectFrac=trueを適用)
+        const rbSpecialEndIdx = lines.findIndex(l=>currentMachine.REGEX.rb_special_end_label.test(l));
+        const rbEndCount = pickCountNear(lines, rbSpecialEndIdx, 5, currentMachine.REGEX.rb_special_end_label, true); // window=5
+        extra.rb_special_end_count = Number.isFinite(rbEndCount) ? rbEndCount : 0;
+        if(Number.isFinite(rbEndCount)) addItem("RB特殊終了画面表示回数", rbEndCount, null);
+      }
+      // 通常の小役
       const result = resolveMetric(lines, labelRe, range, key, allPairs);
       if (result) {
         out[key] = result.count;
         extra[`${key}_den`] = result.denom;
         addItem(currentMachine.METRIC_LABELS[key].replace(/（回）/, ""), result.count, result.denom);
-      } else if (key === "rb_miss_count" && state.currentMachineKey === "SHIN_HANABI") {
-        // 新ハナビのRB中ハズレは回数のみを探す（特殊処理）
-        const rbIdx = lines.findIndex(l=>/(RB中詳細|RB中詳)/.test(l));
-        const count = pickCountNear(lines, rbIdx, 20, currentMachine.REGEX.rb_miss_label, true);
-        extra.rb_miss_count = count;
-        if(Number.isFinite(count)) addItem(currentMachine.METRIC_LABELS[key].replace(/（回）/, ""), count, null);
       }
     }
   });
 
   // EXTRA SIGNALS の抽出
   if (state.currentMachineKey === "SHIN_HANABI") {
-    const bbSlant = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_slant.test(l)), 20, currentMachine.RANGE.bb_slant);
+    const bbSlant = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_slant.test(l)), 5, currentMachine.RANGE.bb_slant);
     if(bbSlant){ extra.bb_slant_den = bbSlant.denom; addItem("風斜め揃い（BB中）", bbSlant.count, bbSlant.denom); }
-    const bbRare = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_rare.test(l)), 20, currentMachine.RANGE.bb_rare);
+    const bbRare = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_rare.test(l)), 5, currentMachine.RANGE.bb_rare);
     if(bbRare){ extra.bb_rare_den = bbRare.denom; addItem("レア役（バラケ目/BB中）", bbRare.count, bbRare.denom); }
-    const rtHC = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.rt_hc.test(l)), 20, currentMachine.RANGE.rt_hc);
+    const rtHC = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.rt_hc.test(l)), 5, currentMachine.RANGE.rt_hc);
     if(rtHC){ extra.rt_hc_den = rtHC.denom; addItem("花火チャレンジ中はずれ", rtHC.count, rtHC.denom); }
-    const rtHG = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.rt_hg.test(l)), 20, currentMachine.RANGE.rt_hg);
+    const rtHG = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.rt_hg.test(l)), 5, currentMachine.RANGE.rt_hg);
     if(rtHG){ extra.rt_hg_den = rtHG.denom; addItem("花火GAME中はずれ", rtHG.count, rtHG.denom); }
   } else if (state.currentMachineKey === "ALEX_BRIGHT") {
     // BB中 リーチ目ハズレ（分母）
-    const bbReachHazure = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_reach_hazure_label.test(l)), 20, currentMachine.RANGE.bb_reach_hazure);
+    const bbReachHazure = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_reach_hazure_label.test(l)), 5, currentMachine.RANGE.bb_reach_hazure);
     if(bbReachHazure){ extra.bb_reach_hazure_den = bbReachHazure.denom; addItem("BB中リーチ目ハズレ", bbReachHazure.count, bbReachHazure.denom); }
     
-    // RB特殊終了画面表示回数（回数のみ）- ロジックを pickCountNear に変更 (rejectFrac=trueを適用)
-    const rbSpecialEndIdx = lines.findIndex(l=>currentMachine.REGEX.rb_special_end_label.test(l));
-    const rbEndCount = pickCountNear(lines, rbSpecialEndIdx, 5, currentMachine.REGEX.rb_special_end_label, true);
-    if(Number.isFinite(rbEndCount)){
-      extra.rb_special_end_count = rbEndCount;
-      addItem("RB特殊終了画面表示回数", rbEndCount, null);
-    } else {
-        extra.rb_special_end_count = 0; // 検出できなければ0とみなす
-    }
-
     // BB中 羽羽鳥C（回数または1/◯）
-    const bbWingHahan = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_wing_hahan.test(l)), 20, currentMachine.RANGE.bb_wing_hahan);
+    const bbWingHahan = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_wing_hahan.test(l)), 5, currentMachine.RANGE.bb_wing_hahan);
     if(bbWingHahan){ extra.bb_wing_hahan_den = bbWingHahan.denom; extra.bb_wing_hahan_count = bbWingHahan.count; addItem("BB中羽羽鳥C回数", bbWingHahan.count, bbWingHahan.denom); }
     
     // BB中リーチ目（手動）フラグの自動検知
@@ -455,22 +461,31 @@ function parseMetricsFromText(raw){
   
   // フラグの自動検知
   if (state.currentMachineKey === "SHIN_HANABI") {
-    // 新ハナビのフラグ自動検知は今回は省略（手動入力に任せる）
+    // 省略
   } else if (state.currentMachineKey === "ALEX_BRIGHT") {
     // RB特殊終了画面表示回数が1回以上ならフラグを立てる（尤度計算に使用）
     if(Number.isFinite(extra.rb_special_end_count) && extra.rb_special_end_count >= 1) {
       pushLog("RB特殊終了画面表示回数が1回以上検出されたため、尤度計算に反映します。");
       extra.rb_special_end_flag = true;
+    } else {
+      extra.rb_special_end_flag = false;
     }
   }
+
 
   // 検出されなかった小役の count/den をログに追記
   const primaryKeys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count");
   const logSummary = primaryKeys.map(k => `${k}=${out[k]??'-'} (1/${extra[`${k}_den`]??"-"})`).join(' | ');
   pushLog(`summary: games=${out.games??'-'} | ${logSummary}`);
 
+  // 抽出結果をstateに反映
   state.metrics = {...state.metrics, ...out};
-  state.extra = {...state.extra, ...extra}; // extraをstateに保存
+  state.extra = {...state.extra, ...extra}; 
+  
+  // 総Gの値をUIに確実に反映
+  const gameInput = $("inp-games");
+  if (gameInput) gameInput.value = state.metrics.games ?? "";
+
   updateSignals(state.extra);
   renderAllTable();
   
@@ -516,14 +531,14 @@ function parseMetricsFromText(raw){
         addByLabelNear(lines, /BB中羽鳥A回数/, "BB中羽羽鳥A回数", [1.0, 5000.0]);
         addByLabelNear(lines, /BB中羽鳥B回数/, "BB中羽羽鳥B回数", [1.0, 5000.0]);
         // BB中羽羽鳥Cはextraで処理済みだが、addItem用に再度実行
-        const bbWingHahanC = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_wing_hahan.test(l)), 20, currentMachine.RANGE.bb_wing_hahan);
+        const bbWingHahanC = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_wing_hahan.test(l)), 5, currentMachine.RANGE.bb_wing_hahan);
         if(bbWingHahanC) addItem("BB中羽羽鳥C回数", bbWingHahanC.count, bbWingHahanC.denom);
 
         addByLabelNear(lines, /BB中ブドウ回数/, "BB中ブドウ回数", [1.0, 5000.0]);
     }
     
     // その他 (アレックス)
-    addByLabelNear(lines, /最大連続羽回数/, "最大連続羽回数", [1,20], true, false); // 回数のみだが近傍探索ロジックの再利用
+    addByLabelNear(lines, /最大連続羽回数/, "最大連続羽回数", [1,20], true, false); 
     addByLabelNear(lines, /最大連続同色羽回数/, "最大連続同色羽回数", [1,20], true, false);
     
     // RB特殊終了画面表示回数は分母を持たないため、別処理（parseMetricsFromTextで実施済み）
@@ -534,10 +549,10 @@ function parseMetricsFromText(raw){
     if(idx<0) return;
     
     if (isCountOnly) {
-        const count = pickCountNear(lines, idx, 20, labelRe, true); // 回数のみ（分母拒否）
+        const count = pickCountNear(lines, idx, 5, labelRe, true); // window=5, 回数のみ（分母拒否）
         if(Number.isFinite(count)) addItem(labelName, count, null);
     } else if (requireDenom) {
-        const got = pickNearBy(lines, idx, 20, range);
+        const got = pickNearBy(lines, idx, 5, range); // window=5
         if(got) addItem(labelName, got.count, got.denom);
     }
   }
@@ -572,7 +587,7 @@ function estimateAllSettings(m){
       if(state.extra.rt_hc_den){ ll+=penalty_denom(state.extra.rt_hc_den, currentMachine.EXPECT_DENOM.rt_hc_miss[s], currentMachine.WEIGHTS.rt_hc_miss); used++; }
       if(state.extra.rt_hg_den){ ll+=penalty_denom(state.extra.rt_hg_den, currentMachine.EXPECT_DENOM.rt_hg_miss[s], currentMachine.WEIGHTS.rt_hg_miss); used++; }
       
-      const rb_miss_count = toNum(m.rb_miss_count); // 編集モードで入力された値 or 抽出された値
+      const rb_miss_count = toNum(state.extra.rb_miss_count); // extraから取得
       if(Number.isFinite(rb_miss_count)){
         if(rb_miss_count===0){ 
           if(s===5||s===6){ ll += currentMachine.WEIGHTS.rb_miss*1.5; used++; }
@@ -599,17 +614,14 @@ function estimateAllSettings(m){
       }
       
       // REG終了画面アレックス図柄（RB特殊終了画面表示回数）
-      if(state.extra.rb_special_end_count!=null && state.extra.rb_special_end_count >= 1){
-         // RB特殊終了画面表示回数が1回以上の場合
+      if(state.extra.rb_special_end_flag){ // フラグで判定
          if(s===6){ ll += currentMachine.WEIGHTS.rb_special_end * 3; used++; }
          else { ll -= currentMachine.WEIGHTS.rb_special_end * 1; used++; } // 設定6以外に罰則
-      } else if (state.extra.rb_special_end_count === 0) {
-         // 0回の場合、尤度計算には反映しない（確率は低いが高設定でもあり得るため）
       }
       
       // BB中羽羽鳥C
       if(state.extra.bb_wing_hahan_den){
-        ll+=penalty_denom(state.extra.bb_wing_hahan_den, currentMachine.EXPECT_DENOM.rb_special_end[s], currentMachine.WEIGHTS.rb_special_end * 0.5); // RB終了画面の期待値を流用
+        ll+=penalty_denom(state.extra.bb_wing_hahan_den, currentMachine.EXPECT_DENOM.rb_special_end[s], currentMachine.WEIGHTS.rb_special_end * 0.5); 
       }
     }
     
@@ -665,7 +677,7 @@ function updateSignals(ex){
     setText("sig-bb-rare",  ex.bb_rare_den ? `1/${ex.bb_rare_den.toFixed(1)}`  : "未検出");
     setText("sig-rt-hc",    ex.rt_hc_den   ? `1/${ex.rt_hc_den.toFixed(2)}`    : "未検出");
     setText("sig-rt-hg",    ex.rt_hg_den   ? `1/${ex.rt_hg_den.toFixed(2)}`    : "未検出");
-    const rbMissCount = toNum(state.metrics.rb_miss_count);
+    const rbMissCount = toNum(state.extra.rb_miss_count);
     setText("sig-rb-miss",  Number.isFinite(rbMissCount)? `${rbMissCount}回` : "未検出");
     setText("sig-yohaku-hazure", state.flags.yohakuHazure? "チェックON（設定1・2=0%）" : "未検出");
   } else if (state.currentMachineKey === "ALEX_BRIGHT") {
@@ -707,7 +719,7 @@ function renderMetrics(firstRender=false){
       const v = e.target.value==="" ? undefined : toNum(e.target.value);
       state.metrics.games=v;
       renderBars();
-      keys.forEach(k=>updatePerG(k)); // 他の項目の /G も更新
+      keys.forEach(k=>updatePerG(k)); 
     };
     input.onblur=()=>{ renderMetrics(false); };
     row.appendChild(input);
@@ -737,13 +749,13 @@ function renderMetrics(firstRender=false){
       wrap.appendChild(row);
     });
     
-    // 新ハナビのRB中ハズレ
+    // 特殊な回数のみの項目（新ハナビのRB中ハズレ）
     if (state.currentMachineKey === "SHIN_HANABI") {
       const rbMissKey = "rb_miss_count";
       row=document.createElement("label"); row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
       keySpan=document.createElement("span"); keySpan.className="key"; 
       keySpan.textContent=currentMachine.METRIC_LABELS[rbMissKey] || rbMissKey; row.appendChild(keySpan);
-      input=document.createElement("input"); input.type="number"; input.step="1"; input.id=`inp-${rbMissKey}`;
+      input=document.createElement("input"); input.type="number"; input.step="1"; input.id:`inp-${rbMissKey}`;
       
       const val = state.extra[rbMissKey] ?? undefined;
       input.value = val ?? "";
@@ -767,7 +779,10 @@ function renderMetrics(firstRender=false){
     const input=$(`inp-${k}`);
     if(input){
       const val = state.metrics[k] ?? undefined;
-      if(document.activeElement!==input){ input.value = val ?? ""; }
+      if(document.activeElement!==input){ 
+        // 抽出値がundefinedの場合、UIの値をリセットしない（手動入力の可能性を考慮）
+        if(val !== undefined) input.value = val ?? ""; 
+      }
       input.disabled = !state.flags.edit;
       updatePerG(k);
     }
@@ -777,7 +792,9 @@ function renderMetrics(firstRender=false){
       const input=$(`inp-${rbMissKey}`);
       if(input){
         const val = state.extra[rbMissKey] ?? undefined;
-        if(document.activeElement!==input){ input.value = val ?? ""; }
+        if(document.activeElement!==input){ 
+          if(val !== undefined) input.value = val ?? "";
+        }
         input.disabled = !state.flags.edit;
       }
   }
@@ -795,7 +812,7 @@ function updatePerG(k){
     const per=(count||0)/g;
     span.textContent = Number.isFinite(per) ? "/G "+per.toFixed(4) : "";
   }else if (k==="games") {
-    span.textContent = "/G 0.0000"; // 総Gのところは見た目だけ /G 0.0000 にする
+    span.textContent = "/G 0.0000"; 
   } else {
     span.textContent = "";
   }
@@ -831,7 +848,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.2）`;
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.3）`;
     
     // データをクリアして初期化
     state.metrics={games:undefined};
