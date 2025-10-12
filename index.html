@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.10）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.11）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.10）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.11）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
@@ -175,20 +175,20 @@ const MACHINE_DATA = {
     // 必須メトリクス（総G除く）
     PRIMARY_METRICS: ["wing", "three_medal", "cherryA_sum", "cherryB", "grape_sum"],
     METRIC_LABELS: {
-      games:"総G", wing:"羽（回）", three_medal:"3枚役（回）", cherryA_sum:"チェリー合算（回）", // <-- ラベルから 'A' を削除 (Rev.7)
+      games:"総G", wing:"羽（回）", three_medal:"3枚役（回）", cherryA_sum:"チェリー合算（回）", 
       cherryB:"チェリーB（回）", grape_sum:"ブドウ合算（回）"
     },
     // OCR認識用正規表現 - 「回数」や「合計」の有無に対応
     REGEX: {
       wing: /羽\b|羽(?:合算|合計)(?:回数)?/, 
-      three_medal: /(3枚役|羽鳥|羽鳥回数)(?:回数)?/, // Rev.9: '羽鳥'の後に'回数'がない場合にも対応
+      three_medal: /(3枚役|羽鳥|羽鳥回数)(?:回数)?/, 
       cherryA_sum: /チェリー\s*(?:合算|合計)(?:回数)?/, 
       cherryB: /チェリーB(?:回数)?/, 
-      grape_sum: /ブドウ\s*(?:合算|合計)?(?:回数)?/, // Rev.9: 'ブドウ 合算' のように間にスペースがあっても対応
-      bb_reach_hazure_label: /リーチ目(?:ハズレ|ハズレ目)/, // BB中詳細の近傍で探す
-      rb_special_end_label: /RB特殊終了画面表示回数/, // その他の近傍で探す
+      grape_sum: /ブドウ\s*(?:合算|合計)?(?:回数)?/, 
+      bb_reach_hazure_label: /リーチ目(?:ハズレ|ハズレ目)/, 
+      rb_special_end_label: /RB特殊終了画面表示回数/, 
       bb_wing_hahan: /BB中羽羽鳥C/,
-      bb_reach_manually: /BB中リーチ目（ハズレ）/ // 抽出シグナルからの手動フラグ
+      bb_reach_manually: /BB中リーチ目（ハズレ）/ 
     },
     // フラグ・チェックボックス
     OPTS_HTML: `
@@ -269,6 +269,8 @@ const RE_FRAC_ANY = /[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/;
 const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere (used in pickCountNear and Rev.10 split line)
 // Rev.9 Fix: Combined regex for Case A (Count + Fraction on same line), making '回' optional
 const RE_COUNT_FRAC_PAIR = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
+// Rev.11 FIX: Count and Denom on the same line, allowing arbitrary text between them (for messy OCR/line coalesce)
+const RE_COUNT_FRAC_WITH_GARBAGE = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*.*?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
 
 function countFrac(line){
   // Note: This function is mostly designed for lines that *only* contain the count/frac.
@@ -307,20 +309,30 @@ function pickNearBy(lines, labelIdx, window, range){
     let currentBest = null;
     const line = lines[j];
 
-    // Case A: Count and Denom on the same line (allowing text/label before them)
-    // Rev.9 Fix: Use RE_COUNT_FRAC_PAIR which allows the '回' character to be optional
-    const pair_match = line.match(RE_COUNT_FRAC_PAIR); 
-    
-    if (pair_match) {
-        // pair_match[1] is the count, pair_match[2] is the denom
-        const count = toNum(pair_match[1]); 
-        const denom = parseFloat(pair_match[2].replace(/,/g,''));
+    // Case A (V2: Rev.11 New): Count and Denom on the same line, allowing garbage between them. (HIGH PRIORITY FIX)
+    const pair_match_v2 = line.match(RE_COUNT_FRAC_WITH_GARBAGE); 
+    if (pair_match_v2) {
+        const count = toNum(pair_match_v2[1]); 
+        const denom = parseFloat(pair_match_v2[2].replace(/,/g,''));
         if(count!=null && Number.isFinite(denom) && denom>=lo && denom<=hi){
             currentBest = {count, denom, idx:j};
         }
     }
+    
+    // Case A (V1: Original Rev.9/10): Count and Denom on the same line (tight match).
+    if (!currentBest) { 
+        const pair_match = line.match(RE_COUNT_FRAC_PAIR); 
+        if (pair_match) {
+            // pair_match[1] is the count, pair_match[2] is the denom
+            const count = toNum(pair_match[1]); 
+            const denom = parseFloat(pair_match[2].replace(/,/g,''));
+            if(count!=null && Number.isFinite(denom) && denom>=lo && denom<=hi){
+                currentBest = {count, denom, idx:j};
+            }
+        }
+    }
 
-    // Case B (Rev.10 Improvement): Check for ANY count (RE_COUNT_GLOBAL) on line j and ANY fraction (RE_FRAC_ANY) on line j+1.
+    // Case B (Rev.10: Count on line j, Denom on line j+1).
     // This allows the count line to contain other text (like the small role name from OCR failure)
     if (!currentBest && j+1 < lines.length) {
         // Line j: Check for any count with '回' (or similar) attached, anywhere in the line.
@@ -818,7 +830,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.10）`; // <-- Rev.10に更新
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.11）`; // <-- Rev.11に更新
     
     // データをクリアして初期化
     state.metrics={games:undefined};
