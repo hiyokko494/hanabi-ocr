@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.12）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.13）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.12）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.13）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
@@ -267,9 +267,8 @@ const RE_G_ONLY   = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
 const RE_KAI_LIKE = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*$/i; // Count only line (start/end anchors)
 const RE_FRAC_ANY = /[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
 const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere
-// Rev.9 Fix: Combined regex for Case A (Count + Fraction on same line), making '回' optional
-const RE_COUNT_FRAC_PAIR = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
-// const RE_COUNT_FRAC_WITH_GARBAGE = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*.*?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; // **Rev.12: This problematic regex is removed.**
+// Rev.13 Fix: Re-introduce non-greedy matching (.*?) between count and fraction for single line.
+const RE_COUNT_FRAC_PAIR = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*.*?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
 
 function countFrac(line){
   // Note: This function is mostly designed for lines that *only* contain the count/frac.
@@ -280,17 +279,26 @@ function countFrac(line){
 }
 /* 文書全体の「回+1/◯」候補 */
 function collectAllPairs(lines){
-  const pairs=[];
+  const out=[];
   for(let i=0;i<lines.length;i++){
-    const {count,denom}=countFrac(lines[i]); // Uses RE_KAI_LIKE (^$)
-    if(count!=null && denom!=null){ pairs.push({idx:i,count,denom}); continue; }
-    const c=lines[i].match(RE_KAI_LIKE);
+    let cur=lines[i];
+    // Case A (Single line, flexible match)
+    const pair_match = cur.match(RE_COUNT_FRAC_PAIR); 
+    if (pair_match) {
+        const count = toNum(pair_match[1]); 
+        const denom = parseFloat(pair_match[2].replace(/,/g,''));
+        if(count!=null && Number.isFinite(denom)){ out.push({idx:i,count,denom, type:"A"}); continue; }
+    }
+    
+    // Case B (Split line: Count on line i, Denom on line i+1)
+    const c=cur.match(RE_KAI_LIKE);
     const f=(i+1<lines.length)?lines[i+1].match(RE_FRAC_ANY):null;
-    // 回数のみの行の次に 1/◯ が来るパターン
-    if(c && f){ pairs.push({idx:i,count:toNum(c[1]),denom:parseFloat(f[1].replace(/,/g,''))}); i++; }
+    if(c && f){ 
+      out.push({idx:i,count:toNum(c[1]),denom:parseFloat(f[1].replace(/,/g,'')), type:"B"}); i++; continue; 
+    }
   }
-  pushLog(`pairs: ${pairs.length}件収集`);
-  return pairs;
+  pushLog(`pairs: ${out.length}件収集`);
+  return out;
 }
 /**
  * 近傍探索（ウィンドウサイズを5行に狭くした）
@@ -308,18 +316,20 @@ function pickNearBy(lines, labelIdx, window, range){
     let currentBest = null;
     const line = lines[j];
 
-    // Case A (V1: Same line, tight match)
+    // Case A (Rev.13: Same line, flexible match)
     const pair_match = line.match(RE_COUNT_FRAC_PAIR); 
     if (pair_match) {
         // pair_match[1] is the count, pair_match[2] is the denom
         const count = toNum(pair_match[1]); 
         const denom = parseFloat(pair_match[2].replace(/,/g,''));
         if(count!=null && Number.isFinite(denom) && denom>=lo && denom<=hi){
+            // 検出が成功した場合、その行（j）のインデックスを使用
             currentBest = {count, denom, idx:j};
         }
     }
 
     // Case B (Split line: Count on line j, Denom on line j+1).
+    // ただし、Case Aで既に検出されている行（j）はスキップしない（両パターンにヒットする可能性があるため）。
     if (!currentBest && j+1 < lines.length) {
         // Line j: Check for any count with '回' (or similar) attached, anywhere in the line.
         const c=line.match(RE_COUNT_GLOBAL); 
@@ -331,6 +341,7 @@ function pickNearBy(lines, labelIdx, window, range){
             const den=parseFloat(f[1].replace(/,/g,''));
             // Check range before setting best
             if(cnt!=null && Number.isFinite(den) && den>=lo && den<=hi){
+                // 検出が成功した場合、回数のある行（j）のインデックスを使用
                 currentBest = {count:cnt, denom:den, idx:j}; 
             }
         }
@@ -821,7 +832,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.12）`; // <-- Rev.12に更新
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.13）`; // <-- Rev.13に更新
     
     // データをクリアして初期化
     state.metrics={games:undefined};
