@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.11）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.12）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.11）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.12）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
@@ -266,11 +266,10 @@ function coalesceLines(lines){
 const RE_G_ONLY   = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
 const RE_KAI_LIKE = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*$/i; // Count only line (start/end anchors)
 const RE_FRAC_ANY = /[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
-const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere (used in pickCountNear and Rev.10 split line)
+const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere
 // Rev.9 Fix: Combined regex for Case A (Count + Fraction on same line), making '回' optional
 const RE_COUNT_FRAC_PAIR = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
-// Rev.11 FIX: Count and Denom on the same line, allowing arbitrary text between them (for messy OCR/line coalesce)
-const RE_COUNT_FRAC_WITH_GARBAGE = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*.*?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
+// const RE_COUNT_FRAC_WITH_GARBAGE = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*.*?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; // **Rev.12: This problematic regex is removed.**
 
 function countFrac(line){
   // Note: This function is mostly designed for lines that *only* contain the count/frac.
@@ -309,31 +308,18 @@ function pickNearBy(lines, labelIdx, window, range){
     let currentBest = null;
     const line = lines[j];
 
-    // Case A (V2: Rev.11 New): Count and Denom on the same line, allowing garbage between them. (HIGH PRIORITY FIX)
-    const pair_match_v2 = line.match(RE_COUNT_FRAC_WITH_GARBAGE); 
-    if (pair_match_v2) {
-        const count = toNum(pair_match_v2[1]); 
-        const denom = parseFloat(pair_match_v2[2].replace(/,/g,''));
+    // Case A (V1: Same line, tight match)
+    const pair_match = line.match(RE_COUNT_FRAC_PAIR); 
+    if (pair_match) {
+        // pair_match[1] is the count, pair_match[2] is the denom
+        const count = toNum(pair_match[1]); 
+        const denom = parseFloat(pair_match[2].replace(/,/g,''));
         if(count!=null && Number.isFinite(denom) && denom>=lo && denom<=hi){
             currentBest = {count, denom, idx:j};
         }
     }
-    
-    // Case A (V1: Original Rev.9/10): Count and Denom on the same line (tight match).
-    if (!currentBest) { 
-        const pair_match = line.match(RE_COUNT_FRAC_PAIR); 
-        if (pair_match) {
-            // pair_match[1] is the count, pair_match[2] is the denom
-            const count = toNum(pair_match[1]); 
-            const denom = parseFloat(pair_match[2].replace(/,/g,''));
-            if(count!=null && Number.isFinite(denom) && denom>=lo && denom<=hi){
-                currentBest = {count, denom, idx:j};
-            }
-        }
-    }
 
-    // Case B (Rev.10: Count on line j, Denom on line j+1).
-    // This allows the count line to contain other text (like the small role name from OCR failure)
+    // Case B (Split line: Count on line j, Denom on line j+1).
     if (!currentBest && j+1 < lines.length) {
         // Line j: Check for any count with '回' (or similar) attached, anywhere in the line.
         const c=line.match(RE_COUNT_GLOBAL); 
@@ -343,6 +329,7 @@ function pickNearBy(lines, labelIdx, window, range){
         if(c && f){
             const cnt=toNum(c[1]); 
             const den=parseFloat(f[1].replace(/,/g,''));
+            // Check range before setting best
             if(cnt!=null && Number.isFinite(den) && den>=lo && den<=hi){
                 currentBest = {count:cnt, denom:den, idx:j}; 
             }
@@ -479,7 +466,7 @@ function parseMetricsFromText(raw){
     }
   }
   // 検出されなかった小役の count/den をログに追記
-  const primaryKeys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count");
+  const primaryKeys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count" && k !== "rb_special_end");
   const logSummary = primaryKeys.map(k => `${k}=${out[k]??'-'} (1/${extra[`${k}_den`]??"-"})`).join(' | ');
   pushLog(`summary: games=${out.games??'-'} | ${logSummary}`);
   // 抽出結果をstateに反映
@@ -559,7 +546,7 @@ function estimateAllSettings(m){
   const ll_binom=(k,n,p)=>{p=clamp01(p); const q=1-p; return k*Math.log(p)+(n-k)*Math.log(q);};
   const penalty_denom=(d,exp,w)=>(!Number.isFinite(d)||!Number.isFinite(exp))?0:(-w*Math.pow((d-exp)/exp,2)/(2*Math.pow(0.12,2)));
   const settings=currentMachine.SETTINGS;
-  const metricsKeys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count"); // rb_miss_count は別途処理
+  const metricsKeys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count" && k !== "rb_special_end"); // rb_miss_count/rb_special_end は別途処理
   const rows=settings.map((s,i)=>{
     let ll=0, used=0;
     
@@ -690,8 +677,9 @@ function updateSignals(ex){
 }
 function renderMetrics(firstRender=false){
   const wrap=$("metrics");
-  // rb_miss_count は metrics に入れず extra で管理（回数のみのため）
-  const keys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count"); 
+  // rb_miss_count / rb_special_end は metrics に入れず extra で管理（回数のみのため）
+  const primaryKeys = currentMachine.PRIMARY_METRICS;
+  const metricsKeys = primaryKeys.filter(k => k !== "rb_miss_count" && k !== "rb_special_end"); 
   
   if(firstRender){
     wrap.innerHTML="";
@@ -706,14 +694,14 @@ function renderMetrics(firstRender=false){
       const v = e.target.value==="" ? undefined : toNum(e.target.value);
       state.metrics.games=v;
       renderBars();
-      keys.forEach(k=>updatePerG(k)); 
+      metricsKeys.forEach(k=>updatePerG(k)); 
     };
     input.onblur=()=>{ renderMetrics(false); };
     row.appendChild(input);
     let tail=document.createElement("span"); tail.className="perg"; tail.id=`perg-games`; tail.textContent="/G 0.0000"; row.appendChild(tail);
     wrap.appendChild(row);
     // 主要小役
-    keys.forEach(k=>{
+    metricsKeys.forEach(k=>{
       row=document.createElement("label"); row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
       keySpan=document.createElement("span"); keySpan.className="key"; 
       keySpan.textContent=currentMachine.METRIC_LABELS[k] || k; row.appendChild(keySpan);
@@ -735,33 +723,34 @@ function renderMetrics(firstRender=false){
       wrap.appendChild(row);
     });
     
-    // 特殊な回数のみの項目（新ハナビのRB中ハズレ）
-    if (state.currentMachineKey === "SHIN_HANABI") {
-      const rbMissKey = "rb_miss_count";
+    // 特殊な回数のみの項目（新ハナビのRB中ハズレ、アレックスの特殊終了画面）
+    const specialKey = state.currentMachineKey === "SHIN_HANABI" ? "rb_miss_count" : (state.currentMachineKey === "ALEX_BRIGHT" ? "rb_special_end_count" : null);
+    if (specialKey) {
+      const labelKey = state.currentMachineKey === "SHIN_HANABI" ? "rb_miss_count" : "rb_special_end";
       row=document.createElement("label"); row.style.display="flex"; row.style.alignItems="center"; row.style.gap="8px";
       keySpan=document.createElement("span"); keySpan.className="key"; 
-      keySpan.textContent=currentMachine.METRIC_LABELS[rbMissKey] || rbMissKey; row.appendChild(keySpan);
-      input=document.createElement("input"); input.type="number"; input.step="1"; input.id=`inp-${rbMissKey}`;
+      keySpan.textContent=currentMachine.METRIC_LABELS[labelKey] || labelKey; row.appendChild(keySpan);
+      input=document.createElement("input"); input.type="number"; input.step="1"; input.id=`inp-${specialKey}`;
       
-      const val = state.extra[rbMissKey] ?? undefined;
+      const val = state.extra[specialKey] ?? undefined;
       input.value = val ?? "";
       
       input.oninput=(e)=>{
         if(!state.flags.edit) return;
         const v = e.target.value==="" ? undefined : toNum(e.target.value);
-        state.extra[rbMissKey]=v;
+        state.extra[specialKey]=v;
         renderBars();
         updateSignals(state.extra);
       };
       input.onblur=()=>{ renderMetrics(false); };
       row.appendChild(input);
-      tail=document.createElement("span"); tail.className="perg"; tail.id=`perg-${rbMissKey}`; row.appendChild(tail);
+      tail=document.createElement("span"); tail.className="perg"; tail.id=`perg-${specialKey}`; row.appendChild(tail);
       wrap.appendChild(row);
     }
   }
   
   // 編集モードON/OFFで状態を反映
-  ["games"].concat(keys).forEach(k=>{
+  ["games"].concat(metricsKeys).forEach(k=>{
     const input=$(`inp-${k}`);
     if(input){
       const val = state.metrics[k] ?? undefined;
@@ -773,17 +762,19 @@ function renderMetrics(firstRender=false){
       updatePerG(k);
     }
   });
-  if (state.currentMachineKey === "SHIN_HANABI") {
-      const rbMissKey = "rb_miss_count";
-      const input=$(`inp-${rbMissKey}`);
+  // 特殊回数のみの項目も反映
+  const specialKey = state.currentMachineKey === "SHIN_HANABI" ? "rb_miss_count" : (state.currentMachineKey === "ALEX_BRIGHT" ? "rb_special_end_count" : null);
+  if (specialKey) {
+      const input=$(`inp-${specialKey}`);
       if(input){
-        const val = state.extra[rbMissKey] ?? undefined;
+        const val = state.extra[specialKey] ?? undefined;
         if(document.activeElement!==input){ 
           if(val !== undefined) input.value = val ?? "";
         }
         input.disabled = !state.flags.edit;
       }
   }
+  
   const ul = $("log"); ul.innerHTML = "";
   state.log.slice(-30).forEach(msg=>{ const li=document.createElement("li"); li.textContent=msg; ul.appendChild(li); });
 }
@@ -830,7 +821,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.11）`; // <-- Rev.11に更新
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.12）`; // <-- Rev.12に更新
     
     // データをクリアして初期化
     state.metrics={games:undefined};
@@ -912,7 +903,7 @@ RB特殊終了画面表示回数 0回
         setError("総Gが見つかりませんでした。");
       }
       
-      const primaryKeys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count");
+      const primaryKeys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count" && k !== "rb_special_end");
       const gotCount = primaryKeys.filter(k => toNum(state.metrics[k]) != null).length;
       if(gotCount < 3 && primaryKeys.length >= 3) {
           setError(`主要小役（${primaryKeys.map(k => currentMachine.METRIC_LABELS[k]).join('/')}）の検出数が不足しています（${gotCount} / ${primaryKeys.length}）。`);
