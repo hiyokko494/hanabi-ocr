@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.8）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.9）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.8）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.9）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
@@ -181,10 +181,10 @@ const MACHINE_DATA = {
     // OCR認識用正規表現 - 「回数」や「合計」の有無に対応
     REGEX: {
       wing: /羽\b|羽(?:合算|合計)(?:回数)?/, 
-      three_medal: /(3枚役|羽鳥回数)(?:回数)?/, 
-      cherryA_sum: /チェリー\s*(?:合算|合計)(?:回数)?/, // <-- 正規表現から 'A' を削除し、汎用的に (Rev.7)
+      three_medal: /(3枚役|羽鳥|羽鳥回数)(?:回数)?/, // Rev.9: '羽鳥'の後に'回数'がない場合にも対応
+      cherryA_sum: /チェリー\s*(?:合算|合計)(?:回数)?/, 
       cherryB: /チェリーB(?:回数)?/, 
-      grape_sum: /ブドウ(?:合算|合計)(?:回数)?/,
+      grape_sum: /ブドウ\s*(?:合算|合計)?(?:回数)?/, // Rev.9: 'ブドウ 合算' のように間にスペースがあっても対応
       bb_reach_hazure_label: /リーチ目(?:ハズレ|ハズレ目)/, // BB中詳細の近傍で探す
       rb_special_end_label: /RB特殊終了画面表示回数/, // その他の近傍で探す
       bb_wing_hahan: /BB中羽羽鳥C/,
@@ -265,11 +265,13 @@ function coalesceLines(lines){
 /* パターン */
 const RE_G_ONLY   = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
 const RE_KAI_LIKE = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*$/i; // Count only line (start/end anchors)
-const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere in the line (Rev.8)
 const RE_FRAC_ANY = /[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
+const RE_COUNT_GLOBAL = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)/i; // Count anywhere (used in pickCountNear)
+// Rev.9 Fix: Combined regex for Case A (Count + Fraction on same line), making '回' optional
+const RE_COUNT_FRAC_PAIR = /([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
+
 function countFrac(line){
-  // Note: This function is mostly designed for lines that *only* contain the count/frac, 
-  // as RE_KAI_LIKE has ^$ anchors. It is only used here for `collectAllPairs` and is not used in `pickNearBy`'s main logic in Rev.8.
+  // Note: This function is mostly designed for lines that *only* contain the count/frac.
   const c=line.match(RE_KAI_LIKE);
   const f=line.match(RE_FRAC_ANY);
   const denom=f?parseFloat(f[1].replace(/,/g,'')):undefined;
@@ -306,20 +308,19 @@ function pickNearBy(lines, labelIdx, window, range){
     const line = lines[j];
 
     // Case A: Count and Denom on the same line (allowing text/label before them)
-    // Rev.8 Fix: Use RE_COUNT_GLOBAL instead of RE_KAI_LIKE (^$) to find the count anywhere in the line.
-    const c_match = line.match(RE_COUNT_GLOBAL);
-    const f_match = line.match(RE_FRAC_ANY);
+    // Rev.9 Fix: Use RE_COUNT_FRAC_PAIR which allows the '回' character to be optional
+    const pair_match = line.match(RE_COUNT_FRAC_PAIR); 
     
-    if (c_match && f_match) {
-        const count = toNum(c_match[1]); 
-        const denom = parseFloat(f_match[1].replace(/,/g,''));
+    if (pair_match) {
+        // pair_match[1] is the count, pair_match[2] is the denom
+        const count = toNum(pair_match[1]); 
+        const denom = parseFloat(pair_match[2].replace(/,/g,''));
         if(count!=null && Number.isFinite(denom) && denom>=lo && denom<=hi){
             currentBest = {count, denom, idx:j};
         }
     }
 
-    // Case B: Count on line j (Count only line), Denom on line j+1
-    // RE_KAI_LIKE still uses ^$ to ensure it's a pure count line, preventing accidental match on a label line.
+    // Case B: Count on line j (Count only line, uses ^$), Denom on line j+1
     if (!currentBest && j+1 < lines.length) {
         const c=line.match(RE_KAI_LIKE); 
         const f=lines[j+1].match(RE_FRAC_ANY);
@@ -813,7 +814,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.8）`; // <-- Rev.8に更新
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.9）`; // <-- Rev.9に更新
     
     // データをクリアして初期化
     state.metrics={games:undefined};
