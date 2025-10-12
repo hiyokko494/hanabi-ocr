@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.4）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.5）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.4）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.5）</h1>
 
 <div class="card">
   <div class="control-row">
@@ -179,7 +179,7 @@ const MACHINE_DATA = {
       rb_special_end:   {1:128.0, 2:128.0, 5:128.0, 6:20.0}, // 1/128 or 1/20 (RB終了時)
     },
     // 尤度重み (リーチ目ハズレの重みを非常に強くし、設定5/6の確定を演出)
-    WEIGHTS: { wing:1.0, three_medal:0.5, cherryA_sum:1.0, cherryB:1.0, grape_sum:0.1, bb_reach_hazure:3.0, rb_special_end:1.5 },
+    WEIGHTS: { wing:1.0, three_medal:1.0, cherryA_sum:1.0, cherryB:1.0, grape_sum:0.1, bb_reach_hazure:3.0, rb_special_end:1.5 },
     // 設定リスト
     SETTINGS: [1, 2, 5, 6],
     // 必須メトリクス（総G除く）
@@ -189,7 +189,11 @@ const MACHINE_DATA = {
     },
     // OCR認識用正規表現 - 「回数」や「合計」の有無に対応
     REGEX: {
-      wing: /羽\b|羽(?:合算|合計)(?:回数)?/, three_medal: /3枚役(?:回数)?/, cherryA_sum: /チェリーA(?:合算|合計)(?:回数)?/, cherryB: /チェリーB(?:回数)?/, grape_sum: /ブドウ(?:合算|合計)(?:回数)?/,
+      wing: /羽\b|羽(?:合算|合計)(?:回数)?/, 
+      three_medal: /(3枚役|羽鳥回数)(?:回数)?/, // <--- Rev.5 修正点
+      cherryA_sum: /チェリーA(?:合算|合計)(?:回数)?/, 
+      cherryB: /チェリーB(?:回数)?/, 
+      grape_sum: /ブドウ(?:合算|合計)(?:回数)?/,
       bb_reach_hazure_label: /リーチ目(?:ハズレ|ハズレ目)/, // BB中詳細の近傍で探す
       rb_special_end_label: /RB特殊終了画面表示回数/, // その他の近傍で探す
       bb_wing_hahan: /BB中羽羽鳥C/,
@@ -320,7 +324,7 @@ function pickNearBy(lines, labelIdx, window, range){
       if(dist<bestDist){ best={count,denom,idx:j}; bestDist=dist; }
     }else{
       const c=lines[j].match(RE_KAI_LIKE);
-      const f=(j+1<lines.length)?lines[j+1].match(RE_FRAC_ANY):null;
+      const f=(j+1<lines.length)?lines[i+1].match(RE_FRAC_ANY):null;
       // 「回」と「1/◯」が2行に分かれているパターン
       if(c && f){
         const cnt=toNum(c[1]); const den=parseFloat(f[1].replace(/,/g,''));
@@ -848,7 +852,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.4）`;
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.5）`;
     
     // データをクリアして初期化
     state.metrics={games:undefined};
