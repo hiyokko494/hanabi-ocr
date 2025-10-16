@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.6）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.7）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,13 +40,14 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.12 Rev.6）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.7）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
     <select id="machine-select">
-      <option value="SHIN_HANABI">新ハナビ 専用</option>
-      <option value="ALEX_BRIGHT">アレックス ブライト 専用</option>
+      <option value="" disabled selected>機種を選択してください...</option>
+      <option value="SHIN_HANABI">新ハナビ</option>
+      <option value="ALEX_BRIGHT">アレックス ブライト</option>
     </select>
   </div>
 </div>
@@ -208,7 +209,7 @@ const state = {
   flags:{ peace:false, edit:false, yohakuHazure:false, bb_reach_hazure_flag:false }, // フラグ初期化
   allItems:[],
   log:[],
-  currentMachineKey: "ALEX_BRIGHT"
+  currentMachineKey: null // 初期値は null に変更
 };
 /* ---------- Utils ---------- */
 const $ = (id)=>document.getElementById(id);
@@ -216,7 +217,7 @@ function toNum(x){ if(x==null) return undefined; const n=Number(String(x).replac
 function pushLog(msg){ state.log.push(msg); }
 function setError(msg){ const e=$("err"); e.style.display=msg?"block":"none"; e.textContent=msg||""; }
 function setText(id, s){ const el=$(id); el.textContent=s; el.classList.toggle("muted", s.includes("未検出") || s==="—"); }
-/* サニタイズ */
+/* サニタイズ */// <--- Rev.7: OCR崩れ項目名のクリーニングを追加
 function sanitize(s){
   return (s||"")
     .replace(/[０-９]/g, d=>String.fromCharCode(d.charCodeAt(0)-0xFEE0))
@@ -226,6 +227,12 @@ function sanitize(s){
     .replace(/[／]/g, "/")
     .replace(/\s+\/\s+/g, "/")
     .replace(/\s{2,}/g, " ")
+    // --- Rev.7 OCR崩れ項目名クリーニング ---
+    .replace(/チエリ/g, "チェリー") 
+    .replace(/ブウ/g, "ブドウ")     
+    .replace(/はずい|歳机/g, "はずれ") 
+    .replace(/ハズレ目/g, "ハズレ") 
+    // ----------------------------------------
     // ヘッダー・不要文字の削除（ユニメモ対策）
     .replace(/遊技履歴\s*全[0-9]+件/g, "")
     .replace(/[0-9]{4}\/[0-9]{2}-[0-9]+件/g, "")
@@ -263,7 +270,8 @@ function coalesceLines(lines){
 }
 /* パターン */
 const RE_G_ONLY   = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*G\s*$/i;
-const RE_KAI_LIKE = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日)?\s*$/i; 
+// <--- Rev.7: OCR崩れやすい 'l|I|L' を追加
+const RE_KAI_LIKE = /^\s*([0-9]{1,3}(?:,[0-9]{3})*)\s*(?:回|囘|问|n|曰|日|l|I|L)?\s*$/i; 
 const RE_FRAC_ANY = /[1Iｌl]\s*[\/\\।]\s*([0-9][0-9,]*(?:\.[0-9]+)?)/; 
 function countFrac(line){
   const c=line.match(RE_KAI_LIKE);
@@ -278,7 +286,7 @@ function collectAllPairs(lines){
     const {count,denom}=countFrac(lines[i]);
     if(count!=null && denom!=null){ pairs.push({idx:i,count,denom}); continue; }
     const c=lines[i].match(RE_KAI_LIKE);
-    const f=(i+1<lines.length)?lines[i+1].match(RE_FRAC_ANY):null;
+    const f=(i+1<lines.length)?lines[i+1].match(RE_FRAC_ANY):null; 
     // 回数のみの行の次に 1/◯ が来るパターン
     if(c && f){ pairs.push({idx:i,count:toNum(c[1]),denom:parseFloat(f[1].replace(/,/g,''))}); i++; }
   }
@@ -305,7 +313,7 @@ function pickNearBy(lines, labelIdx, window, range){
       if(dist<bestDist){ best={count,denom,idx:j}; bestDist=dist; }
     }else{
       const c=lines[j].match(RE_KAI_LIKE);
-      const f=(j+1<lines.length)?lines[j+1].match(RE_FRAC_ANY):null; // <--- Rev.6 修正点: i+1 から j+1 に修正
+      const f=(j+1<lines.length)?lines[j+1].match(RE_FRAC_ANY):null; 
       // 「回」と「1/◯」が2行に分かれているパターン
       if(c && f){
         const cnt=toNum(c[1]); const den=parseFloat(f[1].replace(/,/g,''));
@@ -321,7 +329,7 @@ function pickNearBy(lines, labelIdx, window, range){
 /* ラベル→近傍→全体フォールバック */
 function resolveMetric(lines, labelRegex, range, labelKey, globalPairs){
   const idx=lines.findIndex(l=>labelRegex.test(l));
-  // 近傍探索ウィンドウを 5行 に限定 (Rev.3: 誤検知防止)
+  // 近傍探索ウィンドウを 5行 に限定 
   let got=pickNearBy(lines, idx, 5, range); 
   
   if(!got && labelKey && currentMachine.PRIMARY_METRICS.includes(labelKey)){
@@ -375,19 +383,47 @@ function parseMetricsFromText(raw){
   currentMachine.PRIMARY_METRICS.forEach(k => out[k] = undefined);
   const extra = {};
   
-  // 総G：G-only最大
-  const cands = lines.map(ln=>{ const m=RE_G_ONLY.exec(ln); return m?toNum(m[1]):null; }).filter(v=>v!=null);
-  if(cands.length){ out.games = Math.max(...cands); pushLog(`総G: G-only最大 → ${out.games}`); } else pushLog("総G: 見つからず");
+  // 総G：Rev.7 修正: ラベル近傍を優先し、G-only最大をフォールバックにする
+  const gamesLabelRe = /(総プレイ数|総回転数|プレイG|総ゲーム数)/;
+  const gamesIdx = lines.findIndex(l => gamesLabelRe.test(l));
+  let gamesFound = undefined;
+
+  if (gamesIdx >= 0) {
+      // 1. ラベル行の近傍で「[数値]G」を探す
+      for(let j=gamesIdx; j<Math.min(lines.length, gamesIdx+3); j++){
+          const m = RE_G_ONLY.exec(lines[j]);
+          if (m) {
+              gamesFound = toNum(m[1]);
+              pushLog(`総G: ラベル近傍採用 idx=${j} → ${gamesFound}`);
+              break;
+          }
+      }
+  }
+
+  // 2. ラベル近傍で見つからなければ、既存の G-only 最大のフォールバック
+  if (gamesFound === undefined) {
+      const cands = lines.map(ln=>{ const m=RE_G_ONLY.exec(ln); return m?toNum(m[1]):null; }).filter(v=>v!=null);
+      if(cands.length){ 
+          gamesFound = Math.max(...cands); 
+          pushLog(`総G: G-only最大フォールバック → ${gamesFound}`);
+      } else {
+          pushLog("総G: 見つからず");
+      }
+  }
+  out.games = gamesFound;
+
   const allPairs = collectAllPairs(lines);
   // PRIMARY METRICS の抽出
   currentMachine.PRIMARY_METRICS.forEach(key => {
     const labelRe = currentMachine.REGEX[key];
     const range = currentMachine.RANGE[key];
     if (labelRe && range) {
-      // RB中ハズレ/特殊終了画面（回数のみの項目）は近傍の回数を優先
+      
+      // RB中ハズレ/特殊終了画面（回数のみの項目）の個別処理
       if (key === "rb_miss_count" && state.currentMachineKey === "SHIN_HANABI") {
-        const rbIdx = lines.findIndex(l=>/(RB中詳細|RB中詳)/.test(l));
-        const count = pickCountNear(lines, rbIdx, 5, currentMachine.REGEX.rb_miss_label, true); // window=5
+        // Rev.7: 'RB中詳細'セクションではなく、'RB中ハズレ'ラベル自体を直接探すように変更
+        const rbMissLabelIdx = lines.findIndex(l=>currentMachine.REGEX.rb_miss_label.test(l));
+        const count = pickCountNear(lines, rbMissLabelIdx, 5, currentMachine.REGEX.rb_miss_label, true); // window=5
         out.rb_miss_count = count; // state.metricsに入れる
         extra.rb_miss_count = count; // extraにも入れる
         if(Number.isFinite(count)) addItem(currentMachine.METRIC_LABELS[key].replace(/（回）/, ""), count, null);
@@ -604,6 +640,9 @@ function barColor(p,max,min){
 }
 function renderBars(){
   const mount=$("bars");
+  // 機種が選択されていない場合は描画しない
+  if(!state.currentMachineKey || !currentMachine) { mount.textContent="機種を選択してください。"; return; }
+  
   const rows=estimateAllSettings(state.metrics);
   if(!rows.length){ mount.textContent="必要な数値が揃うと比較グラフが表示されます。"; return; }
   const perc=rows.map(r=>r.percent), max=Math.max(...perc), min=Math.min(...perc);
@@ -622,6 +661,8 @@ function renderBars(){
 function updateSignals(ex){
   const signalsEl = $("signals");
   signalsEl.innerHTML = "";
+  
+  if (!state.currentMachineKey) { return; } // 機種未選択時は何もしない
   
   if (state.currentMachineKey === "SHIN_HANABI") {
     signalsEl.innerHTML = `
@@ -659,6 +700,10 @@ function updateSignals(ex){
 }
 function renderMetrics(firstRender=false){
   const wrap=$("metrics");
+  if (!state.currentMachineKey) { 
+    wrap.innerHTML="機種を選択してください。";
+    return;
+  }
   // rb_miss_count は metrics に入れず extra で管理（回数のみのため）
   const keys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count"); 
   
@@ -791,6 +836,20 @@ function renderAllTable(){
   });
 }
 function loadMachine(machineKey) {
+    // 機種選択が解除された場合
+    if (!machineKey) {
+        state.currentMachineKey = null;
+        currentMachine = null;
+        document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.7）`;
+        // UIをリセット
+        $("metrics").innerHTML = "機種を選択してください。";
+        $("signals").innerHTML = "";
+        $("table-all").querySelector("tbody").innerHTML = '<tr><td colspan="4" class="muted">抽出できた項目がありません。</td></tr>';
+        $("machine-specific-opts").innerHTML = "";
+        $("bars").textContent="必要な数値が揃うと比較グラフが表示されます。";
+        return;
+    }
+    
     state.currentMachineKey = machineKey;
     currentMachine = MACHINE_DATA[machineKey];
     if (!currentMachine) {
@@ -799,7 +858,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.12 Rev.6）`;
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.16 Rev.7）`;
     
     // データをクリアして初期化
     state.metrics={games:undefined};
@@ -830,7 +889,7 @@ function loadMachine(machineKey) {
 }
 /* ---------- init ---------- */
 function init(){
-  // 初期機種のデータ挿入（アレックスブライトのデモデータを使用）
+  // 初期機種のデータ挿入（前回からの変更なし）
   const alexBrightSample = `アレックス ブライト
 遊技履歴 全1件
 2025/09 - 1件
@@ -867,13 +926,18 @@ RB特殊終了画面表示回数 0回
 新規 1/150`;
   $("text").value = alexBrightSample;
   
-  loadMachine("ALEX_BRIGHT"); // 初期機種ロード
+  // 初期ロード時は機種を選択しない状態から始める (UI改善)
+  loadMachine(null); 
   
   // 機種選択ハンドラ
   $("machine-select").addEventListener("change",(e)=>{
       loadMachine(e.target.value);
   });
   $("btn-parse").addEventListener("click", ()=>{
+    if (!state.currentMachineKey) {
+        setError("先に機種を選択してください。");
+        return;
+    }
     try{
       setError("");
       state.metrics = parseMetricsFromText($("text").value||"");
