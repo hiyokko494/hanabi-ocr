@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.10）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.11）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.10）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.11）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
@@ -134,7 +134,7 @@ const MACHINE_DATA = {
     // OCR認識用正規表現 - 「回数」や「合計」の有無に対応
     REGEX: {
       bell: /風鈴\s*(?:合算|合計|全)(?:回数)?/, cherry: /チェリー\s*(?:合算|合計|全|チエリ)(?:回数)?/, ice: /氷\s*合算(?:回数)?/,
-      bb_slant: /(風斜め揃い|斜め風鈴|風鈴B|風斜め揃|風鈴斜め揃)/, bb_rare: /(レア役|バラケ目|レア)/,
+      bb_slant: /(風斜め揃い|斜め風鈴|風鈴B|風斜め揃|風鈴斜め揃)/, bb_rare: /(レア役|バラケ目|レア)/, // Rev.11: レア役の抽出を強化するため、正規表現を再確認したが、文言はこれで正しい
       rt_hc: /花火チャレンジ中はずれ/, rt_hg: /花火GAME中はずれ/,
       rb_miss_label: /(RB中ハズレ|ハズレ)/, // RB中詳細の近傍で探すためのラベル
       // Rev.9: 予告音氷の近傍探索用ラベル
@@ -161,7 +161,7 @@ const MACHINE_DATA = {
     },
     // 分母レンジ
     RANGE: {
-      wing:   [10, 18], three_medal: [30, 45], cherryA_sum: [18, 35], cherryB: [60, 95], grape_sum: [150, 350], // Rev.10: wing/grape_sum のレンジ調整
+      wing:   [10, 18], three_medal: [30, 45], cherryA_sum: [15, 35], cherryB: [60, 95], grape_sum: [150, 350], // Rev.10: wing/grape_sum のレンジ調整
       bb_reach_hazure: [700, 30000], // BB中リーチ目ハズレ
       rb_special_end: [0, 5000], // RB特殊終了画面表示回数（回数のみ）
       bb_wing_hahan: [1.0, 5000.0], // BB中羽羽鳥C
@@ -180,13 +180,13 @@ const MACHINE_DATA = {
     // 必須メトリクス（総G除く）
     PRIMARY_METRICS: ["wing", "three_medal", "cherryA_sum", "cherryB", "grape_sum"],
     METRIC_LABELS: {
-      games:"総G", wing:"羽（回）", three_medal:"3枚役（回）", cherryA_sum:"チェリー合算（回）", cherryB:"チェリーB（回）", grape_sum:"ブドウ合算（回）" // Rev.10: チェリーA合算をチェリー合算にラベル変更
+      games:"総G", wing:"羽合算（回）", three_medal:"3枚役（回）", cherryA_sum:"チェリー合算（回）", cherryB:"チェリーB（回）", grape_sum:"ブドウ合算（回）" // Rev.11: 羽合算にラベル変更
     },
     // OCR認識用正規表現 - 「回数」や「合計」の有無に対応
     REGEX: {
-      wing: /羽\s*(?:合算|合計|全|)\s*回数?/, // Rev.10: 羽合算に対応
-      three_medal: /(3枚役|羽鳥回数|羽烏回数)/, // Rev.10: 羽烏回数に対応
-      cherryA_sum: /チェリー\s*(?:合算|合計|全)(?:回数)?/, // Rev.10: チェリー合算をチェリーA合算として扱う
+      wing: /羽\s*合算(?:回数)?/, // Rev.11: より厳密に「合算」を必須に
+      three_medal: /(3枚役|羽鳥回数|羽烏回数)/, 
+      cherryA_sum: /チェリー\s*合算(?:回数)?/, // Rev.11: より厳密に「合算」を必須に
       cherryB: /チェリーB(?:回数)?/, 
       grape_sum: /ブドウ(?:合算|合計|回数)?/,
       bb_reach_hazure_label: /リーチ目(?:ハズレ|ハズレ目)/, // BB中詳細の近傍で探す
@@ -206,7 +206,7 @@ const MACHINE_DATA = {
     }
   }
 };
-let currentMachine = MACHINE_DATA.ALEX_BRIGHT;
+let currentMachine = null; // nullに変更
 const state = {
   metrics:{},
   extra:{},
@@ -215,6 +215,8 @@ const state = {
   log:[],
   currentMachineKey: null // 初期値は null に変更
 };
+// サンプルテキストはスクリプトの最後に定義
+
 /* ---------- Utils ---------- */
 const $ = (id)=>document.getElementById(id);
 function toNum(x){ if(x==null) return undefined; const n=Number(String(x).replace(/,/g,'')); return Number.isFinite(n)?n:undefined; }
@@ -231,24 +233,24 @@ function sanitize(s){
     .replace(/[／]/g, "/")
     .replace(/\s+\/\s+/g, "/")
     .replace(/\s{2,}/g, " ")
-    // --- Rev.7/9 OCR崩れ項目名クリーニング ---
+    // --- Rev.7/9/10 OCR崩れ項目名クリーニング ---
     .replace(/チエリ/g, "チェリー") 
     .replace(/ブウ/g, "ブドウ")     
     .replace(/はずい|歳机/g, "はずれ") 
     .replace(/ハズレ目/g, "ハズレ") 
+    .replace(/BB中群細|BB中群組/g, "BB中詳細") 
+    .replace(/烏7/g, "青7")
+    .replace(/段定推測/g, "設定推測")
     // --- Rev.9/10 文字化け/不要文字の除去 ---
-    .replace(/鱍定推測|綌BB|BB中群細|BB中群組/g, "") // OCRで混入した文字化けの可能性が高い部分
-    .replace(/烏7/g, "青7") // Rev.10: 烏7→青7
-    .replace(/段定推測/g, "設定推測") // Rev.10: 段定推測→設定推測
-    .replace(/\(回数検知されず、実際には[0-9]+回\)/g, "") // ユーザーが挿入したコメント
+    .replace(/鱍定推測|綌BB/g, "") // OCRで混入した文字化けの可能性が高い部分
+    .replace(/\(不要\)/g, "") // ユーザーが挿入したコメント
+    .replace(/\(実際には「[^」]+」です\)/g, "") // ユーザーが挿入したコメント（実際には〜）
     // ----------------------------------------
     // ヘッダー・不要文字の削除（ユニメモ対策）
     .replace(/遊技履歴\s*全[0-9]+件/g, "")
     .replace(/[0-9]{4}\/[0-9]{2}-[0-9]+件/g, "")
     .replace(/[0-9]{8,}/g, "") // 1015081110533 などの長い数字列
     .replace(/基本情報|設定推測/g, "")
-    .replace(/\(不要\)/g, "") // ユーザーが挿入したコメント
-    .replace(/\(実際には「[^」]+」です\)/g, "") // ユーザーが挿入したコメント（実際には〜）
     .trim();
 }
 /* ===== 行連結（OCRの見出し割れ修正） ===== */
@@ -336,11 +338,13 @@ function pickNearBy(lines, labelIdx, window, range, requireDenom=true){
     
     // 1行に「回」と「1/◯」があるパターン
     if(count!=null && Number.isFinite(denom)){
-      if(requireDenom && (denom<lo || denom>hi)) continue; // 分母範囲外はスキップ (Rev.9: requireDenom=trueの場合のみ)
+      // Rev.9: requireDenom=trueの場合のみ分母範囲外はスキップ 
+      if(requireDenom && (denom<lo || denom>hi)) continue; 
+      // Rev.11: 項目ラベル行からの距離が短い方を最優先する
       const dist=Math.abs(j-labelIdx);
       if(dist<bestDist){ best={count,denom,idx:j}; bestDist=dist; }
     }else if(!requireDenom && count!=null){
-      // 分母を必要としないが回数のみ見つかった場合 (Rev.9: rb_miss_count / yohaku_ice_count のために追加)
+      // 分母を必要としないが回数のみ見つかった場合
       const dist=Math.abs(j-labelIdx);
       // 分母も検出されていた場合、それは reject 
       if(bestDist===1e9 || dist<bestDist){ 
@@ -364,8 +368,12 @@ function pickNearBy(lines, labelIdx, window, range, requireDenom=true){
 /* ラベル→近傍→全体フォールバック */
 function resolveMetric(lines, labelRegex, range, labelKey, globalPairs){
   const idx=lines.findIndex(l=>labelRegex.test(l));
-  // 近傍探索ウィンドウを 5行 に限定 
-  let got=pickNearBy(lines, idx, 5, range, true); // Rev.9: requireDenom=trueを明示
+  
+  // *** Rev.11 Fix: Alex Brightの主要小役は探索ウィンドウを広げる ***
+  const isAlexPrimary = state.currentMachineKey === "ALEX_BRIGHT" && currentMachine.PRIMARY_METRICS.includes(labelKey);
+  const window = isAlexPrimary ? 8 : 5; 
+  
+  let got=pickNearBy(lines, idx, window, range, true); 
   
   if(!got && labelKey && currentMachine.PRIMARY_METRICS.includes(labelKey) && idx >= 0){ // ラベルが見つかったが、近傍で見つからなかった場合のみフォールバック
     const [lo,hi]=range;
@@ -381,18 +389,19 @@ function resolveMetric(lines, labelRegex, range, labelKey, globalPairs){
       if(p.denom<lo || p.denom>hi) continue;
       // --- Rev.8: 回数が少なすぎるペアをスキップ ---
       if(p.count < minCountThreshold && labelKey !== 'grape_sum') { 
-         // pushLog(`fallback-skip: ${labelKey} - count ${p.count} is too small (idx=${p.idx})`); // ログが多いのでコメントアウト
          continue; 
       }
       // --------------------------------------------
+      // 期待分母からの乖離 (d)
       const d = expects.length? Math.min(...expects.map(ex=>Math.abs(ex - p.denom))) : 0;
-      // ラベル位置からの距離も考慮し、スコアを計算 (ラベルが見つかっている場合は距離を重視)
-      const distFactor = Math.abs(idx-p.idx); 
-      const score = d + 0.0001*distFactor; 
+      // ラベル位置からの距離も考慮し、スコアを計算 (idx >= 0 の場合)
+      const distFactor = idx >= 0 ? Math.abs(idx-p.idx) : 100; // ラベルが見つかっていない場合は距離ペナルティを大きく
+      // Rev.11: 乖離度を重視し、距離ペナルティを小さくする
+      const score = d * 100 + distFactor * 0.01; 
       if(score<bestScore){ best=p; bestScore=score; }
     }
     got=best||null;
-    if(got) pushLog(`${labelKey||'項目'}: fallback採用 idx=${got.idx} → ${got.count??'-'}回 (1/${got.denom??'-'})`);
+    if(got) pushLog(`${labelKey||'項目'}: fallback採用 idx=${got.idx} (スコア${bestScore.toFixed(3)}) → ${got.count??'-'}回 (1/${got.denom??'-'})`);
   }else if(got){
     pushLog(`${labelKey||'項目'}: 近傍採用 idx=${got.idx} → ${got.count??'-'}回 (1/${got.denom??'-'})`);
   }
@@ -500,8 +509,8 @@ function parseMetricsFromText(raw){
     const bbSlant = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_slant.test(l)), 5, currentMachine.RANGE.bb_slant);
     if(bbSlant){ extra.bb_slant_den = bbSlant.denom; addItem("風斜め揃い（BB中）", bbSlant.count, bbSlant.denom); }
     
-    // Rev.9: BB中レア役(バラケ目)は「レア役」ラベル近傍から探す
-    const bbRare = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_rare.test(l)), 5, currentMachine.RANGE.bb_rare);
+    // Rev.11: BBレア役(バラケ目)の探索ウィンドウを広げる
+    const bbRare = pickNearBy(lines, lines.findIndex(l=>currentMachine.REGEX.bb_rare.test(l)), 8, currentMachine.RANGE.bb_rare);
     if(bbRare){ extra.bb_rare_den = bbRare.denom; addItem("レア役（バラケ目/BB中）", bbRare.count, bbRare.denom); }
     
     // 花火チャレンジ中はずれ
@@ -601,7 +610,7 @@ function parseMetricsFromText(raw){
     }
     // BB中詳細 (アレックス)
     if (state.currentMachineKey === "ALEX_BRIGHT") {
-        addByLabelNear(lines, /羽A回数/, "羽A回数", [1.0, 5000.0]); // Rev.10: 羽A/B追加
+        addByLabelNear(lines, /羽A回数/, "羽A回数", [1.0, 5000.0]); 
         addByLabelNear(lines, /羽B回数/, "羽B回数", [1.0, 5000.0]);
         addByLabelNear(lines, /BB中羽鳥A回数/, "BB中羽羽鳥A回数", [1.0, 5000.0]);
         addByLabelNear(lines, /BB中羽烏B回数|BB中羽鳥B回数/, "BB中羽羽鳥B回数", [1.0, 5000.0]);
@@ -620,13 +629,16 @@ function parseMetricsFromText(raw){
     const idx=lines.findIndex(l=>labelRe.test(l));
     if(idx<0) return;
     
+    // Rev.11: 内訳もウィンドウを広めに取る
+    const window = (state.currentMachineKey === "ALEX_BRIGHT") ? 8 : 5; 
+
     if (isCountOnly) {
         // Rev.9: pickNearBy(requireDenom=false) を利用して回数を取得
-        const result = pickNearBy(lines, idx, 5, [0,0], false); 
+        const result = pickNearBy(lines, idx, window, [0,0], false); 
         const count = result ? result.count : undefined;
         if(Number.isFinite(count)) addItem(labelName, count, null);
     } else if (requireDenom) {
-        const got = pickNearBy(lines, idx, 5, range); // window=5
+        const got = pickNearBy(lines, idx, window, range); 
         if(got) addItem(labelName, got.count, got.denom);
     }
   }
@@ -920,25 +932,44 @@ function loadMachine(machineKey) {
     if (!machineKey) {
         state.currentMachineKey = null;
         currentMachine = null;
-        document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.10）`;
+        document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.11）`;
         // UIをリセット
         $("metrics").innerHTML = "機種を選択してください。";
         $("signals").innerHTML = "";
         $("table-all").querySelector("tbody").innerHTML = '<tr><td colspan="4" class="muted">抽出できた項目がありません。</td></tr>';
         $("machine-specific-opts").innerHTML = "";
         $("bars").textContent="必要な数値が揃うと比較グラフが表示されます。";
+        state.log = [];
         return;
     }
     
+    // === Rev.11 Fix: 機種切り替え時のテキストエリア処理 ===
+    const textArea = $("text");
+    const currentText = textArea.value.trim();
+    const isInitialLoad = state.currentMachineKey === null;
+    const oldMachineKey = state.currentMachineKey;
+    
     state.currentMachineKey = machineKey;
     currentMachine = MACHINE_DATA[machineKey];
+    const newSample = (machineKey === "SHIN_HANABI") ? shinHanabiSample.trim() : alexBrightSample.trim();
+    const oldSample = (oldMachineKey === "SHIN_HANABI") ? shinHanabiSample.trim() : (oldMachineKey === "ALEX_BRIGHT" ? alexBrightSample.trim() : null);
+
+    if (currentText === oldSample || currentText === "" || isInitialLoad) {
+      // (1)以前の機種のサンプル (2)空欄 (3)初ロード の場合は、新しいサンプルをセット
+      textArea.value = newSample;
+    } else {
+      // ユーザーのテキストが残っている場合、強制的にクリアして新しいペーストを促す
+      textArea.value = "";
+    }
+    // ====================================================
+
     if (!currentMachine) {
         setError(`機種データが見つかりません: ${machineKey}`);
         return;
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.16 Rev.10）`;
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.16 Rev.11）`;
     
     // データをクリアして初期化
     state.metrics={games:undefined};
@@ -958,11 +989,9 @@ function loadMachine(machineKey) {
         const yohakuEl = $("yohaku-hazure");
         if (peaceEl) peaceEl.onchange = (e) => { state.flags.peace = e.target.checked; renderBars(); };
         if (yohakuEl) yohakuEl.onchange = (e) => { state.flags.yohakuHazure = e.target.checked; updateSignals(state.extra); renderBars(); };
-        $("text").value = shinHanabiSample; // 新ハナビの初期値
     } else if (machineKey === "ALEX_BRIGHT") {
         const reachFlagEl = $("bb_reach_hazure_flag");
         if (reachFlagEl) reachFlagEl.onchange = (e) => { state.flags.bb_reach_hazure_flag = e.target.checked; updateSignals(state.extra); renderBars(); };
-        $("text").value = alexBrightSample; // アレックスの初期値
     }
     renderMetrics(true); 
     updateSignals(state.extra);
@@ -999,29 +1028,41 @@ const alexBrightSample = `
 総プレイ数　2,676G
 総ボーナス回数　22回：1/121.6
 最大獲得枚数　1,437枚
+小役
 羽合算回数　183回：1/14.6
+段定推測（実際には「設定推測」）
+お気に入り歴1件
+投構する（実際には「投稿する」）
 羽A回数　92回：1/29.1
 羽B回数　91回：1/29.4
-羽鳥回数（3枚役の事です）　68回：1/39.4
+羽烏回数（3枚役の事です）　68回：1/39.4
 ブドウ回数　11回：1/243.3
 チェリー合算回数　135回：1/19.8
 チェリーA1回数　25回：1/107.0
 チェリーA2回数　72回：1/37.2
 チェリーB回数　38回：1/70.4
+ボーナス
 総ボーナス回数　22回：1/121.6
 総BB回数　15回：1/178.4
 赤7BB回数　6回：1/446.0
-青7BB回数　9回：1/297.3
+烏7BB回数（青7BB）　9回：1/297.3
 総RB回数　7回：1/382.3
-BB中詳細
+最大連荘回数　3回
+BB中群組（実際には「詳細」です）
 BB中羽鳥A回数　56回：1/4.6
-BB中羽鳥B回数　18回：1/14.2
+BB中羽烏B回数　18回：1/14.2
 BB中羽鳥C回数　0回：1/-
+その他
+烏BB回数　2回
+最大島BB連荘回数　1回
 RB特殊終了画面表示回数　0回
+リーチ目スコア
+獲得スコア　24P
+リーチ目コレクション
+新規　7/150
 `; // Rev.10: ユーザー提供のテキストに置き換え
 
 function init(){
-  $("text").value = shinHanabiSample;
   
   // 初期ロード時は機種を選択しない状態から始める (UI改善)
   loadMachine(null); 
@@ -1045,7 +1086,6 @@ function init(){
       const primaryKeys = currentMachine.PRIMARY_METRICS.filter(k => k !== "rb_miss_count" && k !== "rb_special_end");
       const gotCount = primaryKeys.filter(k => toNum(state.metrics[k]) != null).length;
       if(gotCount < 3 && primaryKeys.length >= 3) {
-          // エラーメッセージの修正 (Rev.10: 存在しない変数名を削除)
           const primaryLabels = primaryKeys.map(k => currentMachine.METRIC_LABELS[k]).join(', ');
           setError(`主要小役（${primaryLabels}）の検出数が不足しています（${gotCount} / ${primaryKeys.length}）。`);
       }
@@ -1055,10 +1095,9 @@ function init(){
   });
   $("edit-mode").addEventListener("change",(e)=>{ state.flags.edit = e.target.checked; renderMetrics(false); });
   
-  // 新ハナビのサンプルを初期値として設定
+  // 初期機種として新ハナビのサンプルをロード
   loadMachine("SHIN_HANABI");
 }
-// 修正点: init() の呼び出しを追加
 init();
 </script>
 </body>
