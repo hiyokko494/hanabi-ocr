@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.7）</title>
+<title>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.8）</title>
 <style>
 /* スタイルシートは前回のものと同じ */
   body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic","Meiryo",sans-serif;margin:24px;color:#111}
@@ -40,7 +40,7 @@
 </style>
 </head>
 <body>
-<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.7）</h1>
+<h1>特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.8）</h1>
 <div class="card">
   <div class="control-row">
     <h3>機種選択</h3>
@@ -184,7 +184,9 @@ const MACHINE_DATA = {
       three_medal: /(3枚役|羽鳥回数)(?:回数)?/, 
       cherryA_sum: /チェリーA(?:合算|合計)(?:回数)?/, 
       cherryB: /チェリーB(?:回数)?/, 
-      grape_sum: /ブドウ(?:合算|合計)(?:回数)?/,
+      // --- Rev.8: 「合算」なしの「ブドウ」にも対応 ---
+      grape_sum: /ブドウ(?:合算|合計|回数)?/,
+      // ------------------------------------------------
       bb_reach_hazure_label: /リーチ目(?:ハズレ|ハズレ目)/, // BB中詳細の近傍で探す
       rb_special_end_label: /RB特殊終了画面表示回数/, // その他の近傍で探す
       bb_wing_hahan: /BB中羽羽鳥C/,
@@ -336,10 +338,24 @@ function resolveMetric(lines, labelRegex, range, labelKey, globalPairs){
     const [lo,hi]=range;
     const expects = currentMachine.EXPECT[labelKey]?.map(v=>1/v) ?? [];
     let best=null, bestScore=Infinity;
+    
+    // --- Rev.8: フォールバック時、回数が極端に小さい候補を除外するフィルタ追加 ---
+    const totalGames = toNum(state.metrics.games) || 1;
+    const minCountThreshold = totalGames / 1000; // 例: 総G1000Gなら1回以下は怪しい
+    // --------------------------------------------------------------------------------
+    
     for(const p of globalPairs){
       if(p.denom<lo || p.denom>hi) continue;
+      // --- Rev.8: 回数が少なすぎるペアをスキップ ---
+      if(p.count < minCountThreshold && labelKey !== 'grape_sum') { 
+         pushLog(`fallback-skip: ${labelKey} - count ${p.count} is too small (idx=${p.idx})`);
+         continue; 
+      }
+      // --------------------------------------------
       const d = expects.length? Math.min(...expects.map(ex=>Math.abs(ex - p.denom))) : 0;
-      const score = d + 0.0001*Math.abs((idx>=0?idx:p.idx)-p.idx);
+      // ラベル位置からの距離も考慮し、スコアを計算
+      const distFactor = idx>=0 ? Math.abs(idx-p.idx) : p.idx; // ラベルが見つかっている場合は距離を重視
+      const score = d + 0.0001*distFactor; 
       if(score<bestScore){ best=p; bestScore=score; }
     }
     got=best||null;
@@ -840,7 +856,7 @@ function loadMachine(machineKey) {
     if (!machineKey) {
         state.currentMachineKey = null;
         currentMachine = null;
-        document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.7）`;
+        document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（多機種対応版：2025.10.16 Rev.8）`;
         // UIをリセット
         $("metrics").innerHTML = "機種を選択してください。";
         $("signals").innerHTML = "";
@@ -858,7 +874,7 @@ function loadMachine(machineKey) {
     }
     // 機種名/タイトル更新
     $("machine-select").value = machineKey;
-    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.16 Rev.7）`;
+    document.querySelector('h1').textContent = `特リプTV｜設定推測ツール（${currentMachine.displayName}対応版：2025.10.16 Rev.8）`;
     
     // データをクリアして初期化
     state.metrics={games:undefined};
